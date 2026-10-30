@@ -1,0 +1,9 @@
+{
+  "name": "NexusDesk P2P",
+  "short_name": "NexusDesk",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#1e1e1e",
+  "theme_color": "#1e1e1e",
+  "description": "App desktop remoto P2P via browser"
+}
