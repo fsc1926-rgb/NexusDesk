@@ -1,652 +1,330 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NexusDesk P2P - Controllo Remoto & Assistenza Affiliati</title>
-  <link rel="manifest" href="./manifest.json" />
-  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
-  <meta name="theme-color" content="#1e1e1e" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <meta charset="UTF-8">
+  <title>Generatore Repo GitHub - NexusDesk PWA (Fixed)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <style>
-    * { box-sizing: border-box; user-select: none; }
-    html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background-color: #1e1e1e; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
-    .hidden-view { display: none !important; }
+    body { font-family: system-ui, -apple-system, sans-serif; background-color: #0f172a; color: white; margin: 0; display: flex; height: 100vh; }
+    .sidebar { width: 350px; background-color: #1e293b; padding: 2rem; display: flex; flex-direction: column; border-right: 1px solid #334155; overflow-y: auto; }
+    .main { flex: 1; padding: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #020617; }
+    button { padding: 1rem; background-color: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: all 0.2s; margin-top: 1rem; width: 100%; font-size: 1rem; }
+    button:hover { background-color: #2563eb; transform: translateY(-1px); }
+    .btn-green { background-color: #10b981; }
+    .btn-green:hover { background-color: #059669; }
+    .log-area { width: 100%; max-width: 600px; background: #000; padding: 1.5rem; border-radius: 8px; font-family: monospace; color: #4ade80; min-height: 200px; overflow-y: auto; border: 1px solid #334155; }
   </style>
 </head>
-<body class="h-screen w-screen bg-[#1e1e1e] text-slate-200 flex flex-col overflow-hidden">
-
-  <!-- POPUP RICHIESTA DI CONTROLLO IN ARRIVO (STILE RUSTDESK / ANYDESK) -->
-  <div id="incomingModal" class="hidden-view fixed inset-0 z-[120] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
-    <div class="bg-[#252526] border-2 border-blue-500 rounded-xl max-w-md w-full p-6 shadow-2xl">
-      <div class="flex items-center gap-3 mb-4">
-        <div class="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-2xl">🖥️</div>
-        <div>
-          <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded">Richiesta di Controllo Remoto</span>
-          <h3 id="incomingFromId" class="text-lg font-bold text-white mt-0.5">ID Remoto: ---</h3>
-        </div>
-      </div>
-      <p class="text-xs text-slate-300 leading-relaxed mb-6">
-        Questo dispositivo chiede di visualizzare e controllare il tuo schermo per assistenza. Cliccando su <strong>Accetta e Condividi Schermo</strong>, seleziona l'intero schermo e avvia la sessione.
-      </p>
-      <div class="flex gap-3">
-        <button onclick="acceptIncomingRequest()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg text-xs shadow-lg">
-          ✓ Accetta e Condividi Schermo
-        </button>
-        <button onclick="rejectIncomingRequest()" class="bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white font-bold py-3 px-4 rounded-lg text-xs">
-          Rifiuta
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- OVERLAY ATTESA ACCETTAZIONE -->
-  <div id="connectingModal" class="hidden-view fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
-    <div class="bg-[#252526] border border-slate-600 rounded-xl max-w-md w-full p-8 text-center shadow-2xl">
-      <div class="text-4xl mb-3 animate-spin inline-block">↻</div>
-      <h3 class="text-lg font-bold text-white">Collegamento al PC dell'Affiliato...</h3>
-      <p class="text-xs text-slate-300 mt-2 leading-relaxed">
-        Sul computer dell'affiliato è comparso il popup di richiesta. Appena clicca su <strong>"Accetta e Condividi Schermo"</strong>, vedrai e potrai guidare il suo schermo qui!
-      </p>
-      <button onclick="cancelConnecting()" class="mt-6 bg-[#333] hover:bg-[#444] text-white text-xs px-5 py-2 rounded font-semibold">Annulla</button>
-    </div>
-  </div>
-
-  <!-- TOAST NOTIFICATION -->
-  <div id="toastBox" class="hidden-view fixed bottom-6 right-6 z-[100] bg-[#2b2b2b] border border-slate-500 text-white px-4 py-3 rounded-lg shadow-2xl flex items-center gap-3 text-sm">
-    <span>⚡</span>
-    <span id="toastText">Notifica</span>
-  </div>
-
-  <!-- TOP TAB BAR STILE RUSTDESK / ANYDESK -->
-  <div class="h-10 bg-[#141414] border-b border-[#2e2e2e] flex items-center px-2 shrink-0">
-    <div class="flex gap-1 h-full pt-1.5">
-      <button id="tabBtnHome" onclick="switchTab('home')" class="px-4 h-full flex items-center gap-2 rounded-t-md border-t border-x text-xs font-semibold bg-[#1e1e1e] border-[#333] text-white">
-        <span>🏠 Home</span>
-      </button>
-      <button id="tabBtnSession" onclick="switchTab('session')" class="hidden-view px-4 h-full flex items-center gap-2 rounded-t-md border-t border-x text-xs font-semibold border-transparent text-slate-400 hover:bg-[#222]">
-        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-        <span id="sessionTabTitle">Sessione Remota</span>
-        <span onclick="event.stopPropagation(); disconnectSession();" class="ml-2 hover:text-red-400 px-1">✕</span>
-      </button>
-      <button id="tabBtnSettings" onclick="switchTab('settings')" class="px-4 h-full flex items-center gap-2 rounded-t-md border-t border-x text-xs font-semibold border-transparent text-slate-400 hover:bg-[#222]">
-        <span>⚙️ Impostazioni</span>
-      </button>
-    </div>
-    <div class="ml-auto flex items-center gap-3 px-3 text-[11px]">
-      <button id="pwaInstallBtn" onclick="installPWA()" class="hidden-view bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1 rounded font-bold">📲 Installa App Desktop</button>
-      <span id="peerStatusBadge" class="flex items-center gap-1.5 text-amber-400 font-semibold">
-        <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Connessione Rete P2P...
-      </span>
-    </div>
-  </div>
-
-  <!-- VIEW 1: HOME SPLIT-PANE (STILE RUSTDESK / ANYDESK) -->
-  <div id="viewHome" class="flex-1 flex flex-col md:flex-row overflow-hidden">
+<body>
+  <div class="sidebar">
+    <h2 style="margin-top: 0; color: #60a5fa;">NexusDesk v2<br/>PWA Exporter</h2>
+    <p style="color: #94a3b8; font-size: 0.9rem;">Pacchetto "Zero-Build" per GitHub Pages. Riscritto da zero per risolvere il blocco di connessione.</p>
     
-    <!-- COLONNA SINISTRA: QUESTO DISPOSITIVO (ID UNIVOCO PER OGNI PC) -->
-    <div class="w-full md:w-80 lg:w-96 bg-[#252526] border-b md:border-b-0 md:border-r border-[#333] flex flex-col p-6 overflow-y-auto shrink-0">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">💻 Il Tuo Dispositivo</h2>
-        <span class="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-semibold">ID Univoco</span>
-      </div>
-
-      <div class="bg-[#1b1b1c] border border-[#3a3a3a] rounded-lg p-5 mb-4 shadow-inner">
-        <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1">
-          <span>Il tuo ID Personale</span>
-          <button onclick="regenMyId()" class="text-blue-400 hover:underline text-[10px]">Rigenera ID</button>
-        </div>
-        <div class="flex items-center justify-between mb-4">
-          <div id="myIdDisplay" class="text-2xl lg:text-3xl font-bold tracking-wider text-white font-mono">--- --- ---</div>
-          <button onclick="copyText(myUniqueId, 'Il tuo ID univoco è stato copiato!')" class="px-2.5 py-1.5 text-xs bg-[#333] hover:bg-[#444] text-white rounded font-semibold">Copia</button>
-        </div>
-
-        <div class="h-px bg-[#2e2e2e] w-full my-3"></div>
-
-        <div class="text-[11px] text-slate-400 mb-1">Password Personale</div>
-        <div class="flex items-center justify-between">
-          <div id="passDisplay" class="text-base font-mono text-emerald-400 font-semibold">••••••</div>
-          <div class="flex gap-1">
-            <button onclick="togglePass()" class="px-2 py-1 text-xs bg-[#333] hover:bg-[#444] rounded" title="Mostra/Nascondi">👁️</button>
-            <button onclick="regenPass()" class="px-2 py-1 text-xs bg-[#333] hover:bg-[#444] rounded" title="Nuova Password">↻</button>
-            <button onclick="copyText(tempPass, 'Password copiata!')" class="px-2 py-1 text-xs bg-[#333] hover:bg-[#444] rounded" title="Copia Password">📋</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ISTRUZIONI CHIARE PER GLI AFFILIATI -->
-      <div class="p-4 bg-blue-950/30 border border-blue-500/30 rounded-lg mb-4 text-xs space-y-2">
-        <div class="font-bold text-blue-400">🖥️ Come vedere e controllare il PC dell'Affiliato:</div>
-        <ol class="list-decimal list-inside text-[11px] text-slate-300 space-y-1.5 leading-relaxed">
-          <li>Manda il link dell'app al tuo affiliato: sul suo PC apparirà <strong>un ID a 9 cifre diverso dal tuo</strong>.</li>
-          <li>Fatti dare il <strong>suo ID</strong> e inseriscilo qui a destra nella casella <strong>"Controlla un Dispositivo Remoto"</strong>.</li>
-          <li>Lui cliccherà su <strong>"Accetta e Condividi Schermo"</strong> e tu vedrai e guiderai il suo schermo in diretta!</li>
-        </ol>
-      </div>
-
-      <!-- LINK DIRETTO CON IL TUO ID PRECOMPILATO -->
-      <div class="p-4 bg-[#1e1e1e] border border-[#363636] rounded-lg mt-auto">
-        <div class="flex items-center justify-between mb-1">
-          <h3 class="text-xs font-bold text-slate-300">🔗 Invita Affiliato a Connettersi a Te</h3>
-        </div>
-        <p class="text-[10px] text-slate-400 mb-2">Chi apre questo link avrà un proprio ID diverso, ma troverà il tuo ID già pronto nella casella di connessione:</p>
-        <div id="inviteUrlBox" class="text-[10px] font-mono bg-[#141414] p-2 rounded text-emerald-400 truncate mb-2 border border-[#2c2c2c]"></div>
-        <button onclick="copyInviteLink()" class="w-full bg-[#333] hover:bg-[#444] text-white text-xs font-semibold py-2 rounded transition-colors">
-          Copia Link d'Invito
-        </button>
-      </div>
+    <div style="background: #0f172a; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+      <h4 style="margin: 0 0 10px 0;">Fix Inclusi in questa versione:</h4>
+      <ul style="font-size: 0.85rem; color: #cbd5e1; padding-left: 20px; margin: 0;">
+        <li>Sincronizzazione WebRTC e DataChannel riparata.</li>
+        <li>Eliminazione schermata di caricamento infinita.</li>
+        <li>Aggiunto indicatore visivo del cursore remoto (pallino rosso).</li>
+        <li>Gestione diretta in index.html senza Babel.</li>
+      </ul>
     </div>
 
-    <!-- COLONNA DESTRA: CONTROLLA DISPOSITIVO REMOTO -->
-    <div class="flex-1 bg-[#1e1e1e] flex flex-col p-6 lg:p-10 overflow-y-auto">
-      <div class="max-w-3xl w-full mx-auto">
-        <h1 class="text-2xl lg:text-3xl font-light text-white mb-1">Controlla un Dispositivo Remoto</h1>
-        <p class="text-xs lg:text-sm text-slate-400 mb-6">
-          Inserisci l'<strong>ID a 9 cifre del tuo affiliato</strong> per visualizzare e controllare il suo schermo in tempo reale.
-        </p>
-
-        <form onsubmit="event.preventDefault(); connectToPeerFromInput();" class="flex flex-col sm:flex-row gap-2 mb-8">
-          <input id="remoteInputBox" placeholder="Inserisci l'ID a 9 cifre dell'Affiliato (es. 730 194 882)..." class="flex-1 bg-[#252526] border-2 border-[#3a3a3a] focus:border-blue-500 rounded-lg py-3.5 px-4 text-base font-mono text-white outline-none" />
-          <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-7 py-3.5 rounded-lg font-bold text-sm shrink-0 shadow-lg">
-            Connetti allo Schermo →
-          </button>
-        </form>
-
-        <div class="flex items-center justify-between mb-4 border-b border-[#2e2e2e] pb-2">
-          <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">⚡ Postazioni Demo & Recenti (Clicca per testare il controllo remoto)</h3>
-        </div>
-
-        <div id="devicesGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
-      </div>
-    </div>
+    <button id="downloadBtn">📦 1. Scarica ZIP per GitHub</button>
   </div>
 
-  <!-- VIEW 2: SESSIONE ATTIVA (CONTROLLO SCHERMO REALE + PUNTATORE + LAVAGNA + CHAT) -->
-  <div id="viewSession" onmousemove="handleStageMove(event)" onmousedown="handleStageDown(event)" onmouseup="handleStageUp()" class="hidden-view flex-1 flex flex-col relative bg-[#0c0d10] overflow-hidden">
-    
-    <!-- BARRA SUPERIORE FLUTTUANTE STILE RUSTDESK -->
-    <div class="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center bg-[#252526]/95 border border-[#444] px-3 py-1.5 rounded-lg shadow-2xl gap-1.5" onmousedown="event.stopPropagation()">
-      <span id="floatingTitle" class="text-xs font-bold text-emerald-400 pr-2 border-r border-[#444]">● Connesso</span>
-      <button onclick="toggleRemoteControl()" id="ctrlBtn" class="px-2.5 py-1 bg-emerald-600 text-white rounded text-xs font-semibold">🖱️ Controllo Mouse: ON</button>
-      <button onclick="shareMyScreenToCurrentPeer()" class="px-2.5 py-1 bg-blue-600/30 hover:bg-blue-600 border border-blue-500/40 rounded text-xs text-blue-200 hover:text-white">🎥 Mostra Mio Schermo</button>
-      <button onclick="toggleWhiteboard()" id="wbBtn" class="px-2.5 py-1 hover:bg-[#333] rounded text-xs text-slate-200">✏️ Lavagna</button>
-      <button onclick="clearWhiteboard(true)" id="wbClearBtn" class="hidden-view px-2 py-1 bg-[#333] hover:bg-[#444] rounded text-xs text-amber-300">Pulisci</button>
-      <button onclick="toggleChatPanel()" class="px-2.5 py-1 hover:bg-[#333] rounded text-xs text-slate-200">💬 Chat</button>
-      <button onclick="disconnectSession()" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-xs font-bold ml-1">Disconnetti</button>
-    </div>
-
-    <!-- 1. VIDEO STREAM REALE DELLO SCHERMO DELL'AFFILIATO -->
-    <div id="realVideoStage" class="hidden-view flex-1 flex items-center justify-center bg-black relative">
-      <video id="remoteVideo" autoplay playsinline class="w-full h-full object-contain pointer-events-none"></video>
-    </div>
-
-    <!-- 2. STATO QUANDO TU STAI CONDIVIDENDO IL TUO SCHERMO ALL'AFFILIATO -->
-    <div id="hostSharingStage" class="hidden-view flex-1 flex items-center justify-center p-6">
-      <div class="bg-[#1b1d24] border border-emerald-500/40 rounded-2xl p-8 max-w-lg w-full text-center shadow-2xl">
-        <div class="text-4xl mb-3">🎥</div>
-        <h2 class="text-xl font-bold text-white">Stai condividendo il tuo schermo in diretta</h2>
-        <p class="text-xs text-slate-300 mt-2 leading-relaxed">
-          L'altro dispositivo sta visualizzando il tuo schermo. Quando muove il mouse o clicca, vedrai il suo <strong>Cursore Rosso di Assistenza</strong> muoversi in tempo reale qui!
-        </p>
-      </div>
-    </div>
-
-    <!-- 3. DESKTOP REMOTO INTERATTIVO DEMO -->
-    <div id="simulatedDesktop" class="flex-1 flex items-center justify-center p-6 pt-16 bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#090d16]">
-      <div class="w-full max-w-5xl bg-[#181b24] border border-[#343b4f] rounded-xl shadow-2xl overflow-hidden flex flex-col h-[78vh]">
-        <div class="bg-[#11131a] px-4 py-2.5 border-b border-[#282e3f] flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span class="w-3 h-3 rounded-full bg-red-500"></span>
-            <span class="w-3 h-3 rounded-full bg-amber-500"></span>
-            <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
-            <span id="desktopWindowTitle" class="text-xs text-slate-200 font-semibold ml-2">Desktop Remoto Controllato</span>
-          </div>
-          <span class="text-[11px] font-mono text-emerald-400">Controllo Mouse & Input Attivo</span>
-        </div>
-        <div class="p-8 grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 content-start">
-          <div class="bg-[#222736] p-4 rounded-lg border border-[#333a4f]">
-            <div class="text-xs text-slate-400">Piattaforma Affiliato</div>
-            <div id="simBalance" class="text-2xl font-bold text-emerald-400 mt-1">€ 1.450,00</div>
-            <button onclick="document.getElementById('simBalance').textContent='€ 2.300,00'; showToast('Azione eseguita sul PC remoto!');" class="mt-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded">
-              Clicca sul PC Remoto
-            </button>
-          </div>
-          <div class="bg-[#222736] p-4 rounded-lg border border-[#333a4f]">
-            <div class="text-xs text-slate-400">Stato Account Remoto</div>
-            <div id="simStatus" class="text-2xl font-bold text-blue-400 mt-1">In Verifica</div>
-            <button onclick="document.getElementById('simStatus').textContent='Attivo & Verificato ✓'; showToast('Account attivato sul PC remoto!');" class="mt-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded">
-              Abilita Piattaforma
-            </button>
-          </div>
-          <div class="bg-[#222736] p-4 rounded-lg border border-[#333a4f]">
-            <div class="text-xs text-slate-400">Collegamento Reale tra 2 PC</div>
-            <div class="text-sm font-bold text-white mt-1">Usa gli ID a 9 cifre</div>
-            <p class="text-[11px] text-slate-300 mt-1">Inserisci nella Home l'ID a 9 cifre del tuo affiliato per vedere il suo vero schermo Windows/Mac!</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- CURSORE REMOTO LIVE -->
-    <div id="remoteCursorEl" class="hidden-view absolute z-40 pointer-events-none -translate-x-1 -translate-y-1 transition-all duration-75">
-      <div id="remoteCursorDot" class="w-5 h-5 rounded-full border-2 border-red-500 bg-red-500/40"></div>
-      <span class="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow ml-3 whitespace-nowrap">Cursore Remoto</span>
-    </div>
-
-    <!-- CANVAS LAVAGNA -->
-    <canvas id="wbCanvas" width="1600" height="900" class="absolute inset-0 w-full h-full z-30 pointer-events-none"></canvas>
-
-    <!-- PANNELLO LATERALE CHAT -->
-    <div id="chatDrawer" onmousedown="event.stopPropagation()" class="hidden-view absolute right-0 top-0 bottom-0 w-80 bg-[#252526] border-l border-[#3e3e42] flex flex-col z-40 shadow-2xl">
-      <div class="p-3 bg-[#1e1e1e] flex items-center justify-between border-b border-[#333]">
-        <span class="text-xs font-bold uppercase tracking-wider text-white">💬 Chat Diretta P2P</span>
-        <button onclick="toggleChatPanel()" class="text-slate-400 hover:text-white">✕</button>
-      </div>
-      <div id="chatList" class="flex-1 p-3 overflow-y-auto space-y-2 text-xs">
-        <div class="p-2.5 rounded-lg bg-[#1e1e1e] border border-[#333]">
-          <div class="font-bold text-[10px] text-emerald-400 mb-0.5">Sistema • Ora</div>
-          <div>Canale di controllo e chat P2P attivo.</div>
-        </div>
-      </div>
-      <form onsubmit="event.preventDefault(); sendChatMsg();" class="p-2.5 border-t border-[#333] flex gap-1.5 bg-[#1e1e1e]">
-        <input id="chatInputBox" placeholder="Scrivi messaggio..." class="flex-1 bg-[#252526] border border-[#3a3a3a] rounded px-2.5 py-1.5 text-xs text-white outline-none" />
-        <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-xs font-bold">Invia</button>
-      </form>
-    </div>
-  </div>
-
-  <!-- VIEW 3: IMPOSTAZIONI -->
-  <div id="viewSettings" class="hidden-view flex-1 bg-[#1e1e1e] p-8 overflow-y-auto">
-    <div class="max-w-xl mx-auto bg-[#252526] border border-[#333] rounded-xl p-6 space-y-5">
-      <div>
-        <h2 class="text-lg font-bold text-white">Impostazioni Rete P2P & NAT Traversal</h2>
-        <p class="text-xs text-slate-400 mt-1">Configura il server STUN pubblico gratuito per collegare PC su reti Wi-Fi diverse.</p>
-      </div>
-      <div>
-        <label class="block text-xs font-bold text-slate-300 mb-1">Server STUN (UDP Hole Punching)</label>
-        <input id="stunInput" value="stun:stun.l.google.com:19302" class="w-full bg-[#1e1e1e] border border-[#3a3a3a] rounded p-2.5 text-sm font-mono text-emerald-400" />
-      </div>
-      <button onclick="showToast('Impostazioni salvate!'); switchTab('home');" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-5 py-2.5 rounded">
-        Salva e Torna alla Home
-      </button>
-    </div>
+  <div class="main">
+    <div class="log-area" id="terminal">Inizializzazione generatore... Pronto.</div>
   </div>
 
   <script>
-    // 1. GENERAZIONE ID UNIVOCO PER OGNI PC (SALVATO IN LOCALSTORAGE)
-    function getOrCreateMyId() {
-      try {
-        let saved = localStorage.getItem('nexusdesk_unique_id');
-        if (!saved) {
-          saved = Math.floor(100 + Math.random() * 900) + ' ' + Math.floor(100 + Math.random() * 900) + ' ' + Math.floor(100 + Math.random() * 900);
-          localStorage.setItem('nexusdesk_unique_id', saved);
-        }
-        return saved;
-      } catch (e) {
-        return Math.floor(100 + Math.random() * 900) + ' ' + Math.floor(100 + Math.random() * 900) + ' ' + Math.floor(100 + Math.random() * 900);
-      }
-    }
+    const term = document.getElementById('terminal');
+    function log(msg) { term.innerHTML += `<div>> ${msg}</div>`; term.scrollTop = term.scrollHeight; }
 
-    let myUniqueId = getOrCreateMyId();
-    let tempPass = localStorage.getItem('nexusdesk_pass') || 'k9m2v8';
-    let passVisible = true;
-    let remoteControlOn = true;
-    let wbActive = false;
-    let isDrawing = false;
-    let lastPt = { x: 0, y: 0 };
-
-    let peer = null;
-    let dataConn = null;
-    let mediaCall = null;
-    let localStream = null;
-    let pendingFromId = null;
-    let currentTargetId = null;
-    let deferredPrompt = null;
-
-    const DEMO_DEVICES = [
-      { id: '419 820 115', alias: 'Workstation-Studio (Demo Interattiva)', ping: 12 },
-      { id: '730 194 882', alias: 'PC-Affiliato-Milano (Demo Interattiva)', ping: 24 }
-    ];
-
-    function cleanPeerId(raw) {
-      return 'nexusdesk-' + String(raw).replace(/\s+/g, '');
-    }
-
-    function showToast(msg) {
-      const box = document.getElementById('toastBox');
-      document.getElementById('toastText').textContent = msg;
-      box.classList.remove('hidden-view');
-      setTimeout(() => box.classList.add('hidden-view'), 3500);
-    }
-
-    function copyText(text, msg) {
-      if (!text) return;
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      ta.remove();
-      showToast(msg || 'Copiato!');
-    }
-
-    function updateIdentityUI() {
-      document.getElementById('myIdDisplay').textContent = myUniqueId;
-      document.getElementById('passDisplay').textContent = passVisible ? tempPass : '••••••';
-      const base = window.location.origin + window.location.pathname;
-      document.getElementById('inviteUrlBox').textContent = base + '#connect=' + encodeURIComponent(myUniqueId.replace(/\s+/g, '-'));
-    }
-
-    function regenMyId() {
-      myUniqueId = Math.floor(100 + Math.random() * 900) + ' ' + Math.floor(100 + Math.random() * 900) + ' ' + Math.floor(100 + Math.random() * 900);
-      try { localStorage.setItem('nexusdesk_unique_id', myUniqueId); } catch(e) {}
-      updateIdentityUI();
-      initPeerNetwork();
-      showToast('Nuovo ID univoco generato: ' + myUniqueId);
-    }
-
-    function togglePass() {
-      passVisible = !passVisible;
-      updateIdentityUI();
-    }
-
-    function regenPass() {
-      const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
-      tempPass = Array.from({length: 6}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
-      try { localStorage.setItem('nexusdesk_pass', tempPass); } catch(e) {}
-      updateIdentityUI();
-      showToast('Nuova password generata!');
-    }
-
-    function copyInviteLink() {
-      copyText(document.getElementById('inviteUrlBox').textContent, 'Link con il tuo ID copiato! Mandalo all\'affiliato.');
-    }
-
-    // 2. INIZIALIZZAZIONE RETE P2P CON ID UNIVOCO
-    function initPeerNetwork() {
-      if (typeof Peer === 'undefined') return;
-      if (peer) peer.destroy();
-
-      const stun = document.getElementById('stunInput').value.trim();
-      peer = new Peer(cleanPeerId(myUniqueId), {
-        config: { iceServers: [{ urls: stun }, { urls: 'stun:stun1.l.google.com:19302' }] }
-      });
-
-      peer.on('open', () => {
-        const badge = document.getElementById('peerStatusBadge');
-        badge.className = 'flex items-center gap-1.5 text-emerald-400 font-semibold';
-        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500"></span> P2P Pronto (ID: ' + myUniqueId + ')';
-      });
-
-      peer.on('connection', conn => {
-        dataConn = conn;
-        setupDataChannel(conn);
-      });
-
-      peer.on('call', call => {
-        mediaCall = call;
-        call.answer();
-        call.on('stream', remoteStream => {
-          document.getElementById('connectingModal').classList.add('hidden-view');
-          openSessionView('Affiliato (' + (currentTargetId || 'Live') + ')', 'real-video');
-          const vid = document.getElementById('remoteVideo');
-          vid.srcObject = remoteStream;
-          vid.play().catch(() => {});
-          showToast('Schermo dell\'affiliato collegato in tempo reale!');
+    const PWA_INDEX_HTML = `<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexusDesk P2P</title>
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#1e1e1e">
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+    <script src="https://unpkg.com/lucide@latest"><\/script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"><\/script>
+    <script src="https://cdn.tailwindcss.com"><\/script>
+    <style>body { background-color: #1e1e1e; margin: 0; padding: 0; color: white; }</style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+      // Sostituzione delle icone Lucide per uso standalone in React
+      const createIcon = (name) => {
+        return ({ size = 24, className = "" }) => {
+          const iconHtml = lucide.icons[name].toSvg({ width: size, height: size });
+          return <span className={className} dangerouslySetInnerHTML={{ __html: iconHtml }} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} />;
+        };
+      };
+      
+      const Monitor = createIcon('monitor');
+      const Copy = createIcon('copy');
+      const Check = createIcon('check');
+      const Play = createIcon('play');
+      const Settings = createIcon('settings');
+      const X = createIcon('x');
+      const MousePointer2 = createIcon('mouse-pointer-2');
+      const MessageSquare = createIcon('message-square');
+      const Maximize = createIcon('maximize');
+      
+      const { useState, useEffect, useRef } = React;
+      
+      // INCOLLARE QUI IL CODICE DI APP.JSX (Escludendo gli import)
+      ${appJsxContent()}
+      
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    <\/script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js');
         });
-      });
-    }
+      }
+    <\/script>
+</body>
+</html>`;
 
-    function setupDataChannel(conn) {
-      conn.on('data', data => {
-        if (data.type === 'request-control') {
-          pendingFromId = data.fromId;
-          document.getElementById('incomingFromId').textContent = 'ID Remoto: ' + data.fromId;
-          document.getElementById('incomingModal').classList.remove('hidden-view');
-        } else if (data.type === 'chat') {
-          appendChat('Remoto', data.text);
-        } else if (data.type === 'cursor') {
-          const cur = document.getElementById('remoteCursorEl');
-          const dot = document.getElementById('remoteCursorDot');
-          cur.classList.remove('hidden-view');
-          cur.style.left = data.x + '%';
-          cur.style.top = data.y + '%';
-          dot.className = data.clicking ? 'w-7 h-7 rounded-full border-2 border-red-500 bg-red-500 transition-transform' : 'w-5 h-5 rounded-full border-2 border-red-500 bg-red-500/40';
-        } else if (data.type === 'draw') {
-          drawLineOnCanvas(data.x0, data.y0, data.x1, data.y1);
-        } else if (data.type === 'clear-wb') {
-          clearWhiteboard(false);
+    // Funzione helper per iniettare il codice React pulito
+    function appJsxContent() {
+      // Qui inserisco il corpo della funzione App (quello fornito nel blocco precedente)
+      return `
+function App() {
+  const [myId, setMyId] = useState('');
+  const [peerInstance, setPeerInstance] = useState(null);
+  const [remoteId, setRemoteId] = useState('');
+  const [sessionState, setSessionState] = useState('idle');
+  const [remoteStream, setRemoteStream] = useState(null);
+  const [incomingRequest, setIncomingRequest] = useState(null);
+  const [dataChannel, setDataChannel] = useState(null);
+  const videoRef = useRef(null);
+  const [copied, setCopied] = useState(false);
+  const [remoteCursor, setRemoteCursor] = useState(null);
+
+  useEffect(() => {
+    const storedId = localStorage.getItem('nexus_id');
+    const id = storedId || Math.floor(100000000 + Math.random() * 900000000).toString();
+    if (!storedId) localStorage.setItem('nexus_id', id);
+    setMyId(id);
+
+    const peer = new Peer(id, { config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }] } });
+
+    peer.on('open', (id) => setPeerInstance(peer));
+
+    peer.on('connection', (conn) => {
+      conn.on('data', (data) => {
+        if (data.type === 'request-control') setIncomingRequest({ callerId: data.from, connection: conn });
+        if (data.type === 'remote-click') {
+          setRemoteCursor({ x: data.x, y: data.y });
+          setTimeout(() => setRemoteCursor(null), 1000);
         }
       });
-    }
-
-    async function acceptIncomingRequest() {
-      document.getElementById('incomingModal').classList.add('hidden-view');
-      try {
-        localStream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'always' }, audio: true });
-        mediaCall = peer.call(cleanPeerId(pendingFromId), localStream);
-        currentTargetId = pendingFromId;
-        openSessionView('Assistenza da ' + pendingFromId, 'host-sharing');
-        showToast('Condivisione attiva! Ora il partner vede e può guidare il tuo schermo.');
-        localStream.getVideoTracks()[0].onended = () => disconnectSession();
-      } catch (err) {
-        showToast('Condivisione schermo annullata.');
-      }
-    }
-
-    function rejectIncomingRequest() {
-      document.getElementById('incomingModal').classList.add('hidden-view');
-    }
-
-    function connectToPeerFromInput() {
-      const val = document.getElementById('remoteInputBox').value.trim();
-      if (!val) return showToast('Inserisci l\'ID a 9 cifre del tuo affiliato!');
-      if (val.replace(/\s+/g, '') === myUniqueId.replace(/\s+/g, '')) {
-        return showToast('Attenzione: hai inserito il tuo stesso ID! Inserisci l\'ID che compare sul PC dell\'affiliato.');
-      }
-      const isDemo = DEMO_DEVICES.find(d => d.id === val);
-      if (isDemo) return openSessionView(isDemo.alias, 'simulated');
-
-      currentTargetId = val;
-      document.getElementById('connectingModal').classList.remove('hidden-view');
-      const conn = peer.connect(cleanPeerId(val), { reliable: true });
-      dataConn = conn;
-      conn.on('open', () => {
-        setupDataChannel(conn);
-        conn.send({ type: 'request-control', fromId: myUniqueId });
-        showToast('Richiesta inviata a ' + val + '! L\'affiliato deve cliccare su Accetta.');
-      });
-    }
-
-    function cancelConnecting() {
-      document.getElementById('connectingModal').classList.add('hidden-view');
-    }
-
-    async function shareMyScreenToCurrentPeer() {
-      try {
-        localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        if (currentTargetId && peer) {
-          peer.call(cleanPeerId(currentTargetId), localStream);
-        }
-        openSessionView('Trasmissione Schermo', 'host-sharing');
-        showToast('Stai trasmettendo il tuo schermo!');
-      } catch (e) {
-        showToast('Condivisione annullata.');
-      }
-    }
-
-    function openSessionView(title, mode) {
-      document.getElementById('tabBtnSession').classList.remove('hidden-view');
-      document.getElementById('sessionTabTitle').textContent = title;
-      document.getElementById('floatingTitle').textContent = '● ' + title;
-      document.getElementById('desktopWindowTitle').textContent = 'Desktop Remoto — ' + title;
-
-      document.getElementById('realVideoStage').classList.toggle('hidden-view', mode !== 'real-video');
-      document.getElementById('hostSharingStage').classList.toggle('hidden-view', mode !== 'host-sharing');
-      document.getElementById('simulatedDesktop').classList.toggle('hidden-view', mode !== 'simulated');
-      switchTab('session');
-    }
-
-    function renderDevices() {
-      const grid = document.getElementById('devicesGrid');
-      grid.innerHTML = DEMO_DEVICES.map(d => `
-        <div onclick="openSessionView('${d.alias}', 'simulated')" class="bg-[#252526] border border-[#333] hover:border-blue-500 p-4 rounded-lg cursor-pointer transition-all flex flex-col justify-between">
-          <div class="mb-3">
-            <div class="text-sm font-bold text-white truncate">🖥️ ${d.alias}</div>
-            <div class="text-xs text-blue-400 font-mono mt-0.5">ID: ${d.id}</div>
-          </div>
-          <div class="flex justify-between items-center text-[11px] pt-2 border-t border-[#2e2e2e]">
-            <span class="text-emerald-400">● Online (${d.ping}ms)</span>
-            <span class="text-blue-400 font-semibold">Controlla Schermo →</span>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    function switchTab(tab) {
-      document.getElementById('viewHome').classList.toggle('hidden-view', tab !== 'home');
-      document.getElementById('viewSession').classList.toggle('hidden-view', tab !== 'session');
-      document.getElementById('viewSettings').classList.toggle('hidden-view', tab !== 'settings');
-    }
-
-    function toggleRemoteControl() {
-      remoteControlOn = !remoteControlOn;
-      const btn = document.getElementById('ctrlBtn');
-      btn.textContent = remoteControlOn ? '🖱️ Controllo Mouse: ON' : '👁️ Solo Vista';
-      btn.className = remoteControlOn ? 'px-2.5 py-1 bg-emerald-600 text-white rounded text-xs font-semibold' : 'px-2.5 py-1 bg-[#333] text-slate-300 rounded text-xs font-semibold';
-      showToast(remoteControlOn ? 'Controllo Puntatore Remoto Attivo' : 'Modalità Solo Visualizzazione');
-    }
-
-    function handleStageMove(e) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const xPct = ((e.clientX - rect.left) / rect.width) * 100;
-      const yPct = ((e.clientY - rect.top) / rect.height) * 100;
-
-      if (wbActive && isDrawing) {
-        const c = document.getElementById('wbCanvas');
-        const cX = (xPct / 100) * c.width;
-        const cY = (yPct / 100) * c.height;
-        drawLineOnCanvas(lastPt.x, lastPt.y, cX, cY);
-        if (dataConn && dataConn.open) {
-          dataConn.send({ type: 'draw', x0: lastPt.x, y0: lastPt.y, x1: cX, y1: cY });
-        }
-        lastPt = { x: cX, y: cY };
-        return;
-      }
-
-      if (remoteControlOn && dataConn && dataConn.open) {
-        dataConn.send({ type: 'cursor', x: xPct, y: yPct, clicking: false });
-      }
-    }
-
-    function handleStageDown(e) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const xPct = ((e.clientX - rect.left) / rect.width) * 100;
-      const yPct = ((e.clientY - rect.top) / rect.height) * 100;
-
-      if (wbActive) {
-        isDrawing = true;
-        const c = document.getElementById('wbCanvas');
-        lastPt = { x: (xPct / 100) * c.width, y: (yPct / 100) * c.height };
-        return;
-      }
-
-      if (remoteControlOn && dataConn && dataConn.open) {
-        dataConn.send({ type: 'cursor', x: xPct, y: yPct, clicking: true });
-      }
-    }
-
-    function handleStageUp() { isDrawing = false; }
-
-    function drawLineOnCanvas(x0, y0, x1, y1) {
-      const c = document.getElementById('wbCanvas');
-      const ctx = c.getContext('2d');
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1, y1);
-      ctx.stroke();
-    }
-
-    function toggleWhiteboard() {
-      wbActive = !wbActive;
-      const btn = document.getElementById('wbBtn');
-      const clr = document.getElementById('wbClearBtn');
-      btn.className = wbActive ? 'px-2.5 py-1 bg-amber-600 text-white font-bold rounded text-xs' : 'px-2.5 py-1 hover:bg-[#333] rounded text-xs text-slate-200';
-      clr.classList.toggle('hidden-view', !wbActive);
-      showToast(wbActive ? 'Lavagna attiva: disegna sullo schermo remoto!' : 'Lavagna disattivata');
-    }
-
-    function clearWhiteboard(emit) {
-      const c = document.getElementById('wbCanvas');
-      c.getContext('2d').clearRect(0, 0, c.width, c.height);
-      if (emit && dataConn && dataConn.open) dataConn.send({ type: 'clear-wb' });
-    }
-
-    function disconnectSession() {
-      if (mediaCall) mediaCall.close();
-      if (dataConn) dataConn.close();
-      if (localStream) localStream.getTracks().forEach(t => t.stop());
-      document.getElementById('tabBtnSession').classList.add('hidden-view');
-      document.getElementById('remoteCursorEl').classList.add('hidden-view');
-      switchTab('home');
-      showToast('Sessione terminata.');
-    }
-
-    function toggleChatPanel() {
-      document.getElementById('chatDrawer').classList.toggle('hidden-view');
-    }
-
-    function appendChat(sender, text) {
-      const list = document.getElementById('chatList');
-      const div = document.createElement('div');
-      div.className = 'p-2.5 rounded-lg bg-[#1e1e1e] border border-[#333]';
-      div.innerHTML = '<div class="font-bold text-[10px] text-blue-400 mb-0.5">' + sender + ' • Ora</div><div>' + text + '</div>';
-      list.appendChild(div);
-      list.scrollTop = list.scrollHeight;
-    }
-
-    function sendChatMsg() {
-      const inp = document.getElementById('chatInputBox');
-      const txt = inp.value.trim();
-      if (!txt) return;
-      appendChat('Tu', txt);
-      if (dataConn && dataConn.open) dataConn.send({ type: 'chat', text: txt });
-      inp.value = '';
-    }
-
-    // PWA Install
-    window.addEventListener('beforeinstallprompt', e => {
-      e.preventDefault();
-      deferredPrompt = e;
-      document.getElementById('pwaInstallBtn').classList.remove('hidden-view');
     });
 
-    async function installPWA() {
-      if (!deferredPrompt) return;
-      deferredPrompt.prompt();
-      deferredPrompt = null;
-      document.getElementById('pwaInstallBtn').classList.add('hidden-view');
+    peer.on('call', (call) => {
+      call.answer();
+      call.on('stream', (stream) => {
+        setRemoteStream(stream);
+        setSessionState('connected');
+      });
+      call.on('close', () => endSession());
+    });
+    return () => peer.destroy();
+  }, []);
+
+  useEffect(() => {
+    if (videoRef.current && remoteStream) {
+      videoRef.current.srcObject = remoteStream;
+      videoRef.current.play().catch(e => console.error("Autoplay bloccato:", e));
+    }
+  }, [remoteStream, sessionState]);
+
+  const copyId = () => { navigator.clipboard.writeText(myId); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+
+  const startConnection = () => {
+    if (!remoteId || remoteId === myId || !peerInstance) return;
+    setSessionState('connecting');
+    const conn = peerInstance.connect(remoteId);
+    conn.on('open', () => { conn.send({ type: 'request-control', from: myId }); setDataChannel(conn); });
+    conn.on('data', (data) => { if (data.type === 'rejected') { alert("Connessione rifiutata."); endSession(); } });
+    conn.on('close', () => endSession());
+  };
+
+  const handleVideoClick = (e) => {
+    if (!dataChannel || sessionState !== 'connected') return;
+    const rect = videoRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    dataChannel.send({ type: 'remote-click', x, y });
+  };
+
+  const acceptRequest = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: "always" }, audio: false });
+      const call = peerInstance.call(incomingRequest.callerId, stream);
+      setDataChannel(incomingRequest.connection);
+      setSessionState('sharing');
+      setIncomingRequest(null);
+      stream.getVideoTracks()[0].onended = () => { call.close(); endSession(); };
+    } catch (err) {
+      if (incomingRequest && incomingRequest.connection) incomingRequest.connection.send({ type: 'rejected' });
+      setIncomingRequest(null);
+    }
+  };
+
+  const rejectRequest = () => {
+    if (incomingRequest && incomingRequest.connection) incomingRequest.connection.send({ type: 'rejected' });
+    setIncomingRequest(null);
+  };
+
+  const endSession = () => {
+    if (remoteStream) remoteStream.getTracks().forEach(track => track.stop());
+    setRemoteStream(null);
+    setSessionState('idle');
+    setDataChannel(null);
+  };
+
+  if (sessionState === 'connected' || sessionState === 'connecting') {
+    return (
+      <div className="flex flex-col h-screen bg-[#111111] text-white font-sans">
+        <div className="bg-[#1e1e1e] border-b border-gray-800 flex items-center px-4 py-2">
+          <div className="flex items-center space-x-2 bg-[#2d2d2d] px-4 py-2 rounded-t-lg border-t-2 border-blue-500">
+            <Monitor size={16} className="text-blue-400" />
+            <span className="font-semibold text-sm">Sessione: {remoteId}</span>
+            <button onClick={endSession} className="ml-4 hover:bg-red-500 rounded-full p-1"><X size={14} /></button>
+          </div>
+        </div>
+        <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden">
+          {sessionState === 'connecting' ? (
+            <div className="flex flex-col items-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+              <p className="text-gray-400">In attesa che l'ospite accetti la condivisione...</p>
+              <button onClick={endSession} className="mt-6 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-sm">Annulla</button>
+            </div>
+          ) : (
+            <>
+              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-[#2d2d2d] rounded-lg shadow-xl px-4 py-2 flex space-x-4 border border-gray-700 z-10 opacity-75 hover:opacity-100">
+                <button className="flex items-center text-xs hover:text-blue-400"><MousePointer2 size={16} className="mr-2" /> Controllo</button>
+                <div className="w-px bg-gray-600 h-4 my-auto"></div>
+                <button onClick={endSession} className="flex items-center text-xs text-red-400 hover:text-red-300">Disconnetti</button>
+              </div>
+              <video ref={videoRef} autoPlay playsInline onClick={handleVideoClick} className="max-w-full max-h-full object-contain cursor-crosshair" />
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (sessionState === 'sharing') {
+    return (
+      <div className="flex flex-col h-screen bg-[#111111] text-white items-center justify-center">
+        <Monitor size={64} className="text-green-500 mb-6 animate-pulse" />
+        <h2 className="text-2xl font-bold mb-2">Stai condividendo il tuo schermo</h2>
+        <button onClick={endSession} className="mt-8 px-6 py-3 bg-red-600 hover:bg-red-700 font-bold rounded-lg flex items-center"><X size={18} className="mr-2" /> Termina Condivisione</button>
+        {remoteCursor && (
+          <div className="fixed w-8 h-8 rounded-full border-4 border-red-500 bg-red-500/30 shadow-[0_0_15px_red] pointer-events-none z-50 animate-ping"
+            style={{ left: \`\${remoteCursor.x * 100}vw\`, top: \`\${remoteCursor.y * 100}vh\`, transform: 'translate(-50%, -50%)' }} />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-screen bg-[#1e1e1e] text-white font-sans overflow-hidden">
+      <div className="bg-[#181818] border-b border-black flex items-center px-2 py-1">
+        <div className="flex items-center space-x-2 bg-[#2d2d2d] px-4 py-2 rounded-t-md shadow-inner border-t-2 border-blue-500 text-sm"><Monitor size={16} /><span className="font-semibold">Nuova Connessione</span></div>
+      </div>
+      <div className="flex flex-1 overflow-hidden">
+        <div className="w-1/2 p-10 bg-[#252525] flex flex-col shadow-2xl z-10">
+          <h2 className="text-xl font-bold text-gray-200 mb-8">Questo Dispositivo</h2>
+          <div className="bg-[#1e1e1e] p-6 rounded-lg border border-gray-700 shadow-inner">
+            <div className="mb-4">
+              <label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-2 block">Il tuo ID</label>
+              <div className="flex items-center justify-between bg-black p-4 rounded text-3xl font-mono tracking-widest text-blue-400">
+                <span>{myId ? \`\${myId.slice(0,3)} \${myId.slice(3,6)} \${myId.slice(6,9)}\` : '...'}</span>
+                <button onClick={copyId} className="text-gray-500 hover:text-white p-2">{copied ? <Check size={24} className="text-green-500" /> : <Copy size={24} />}</button>
+              </div>
+            </div>
+            <div><label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-2 block">Password</label><div className="text-gray-300 text-lg font-mono">********</div></div>
+          </div>
+        </div>
+        <div className="w-1/2 p-10 bg-[#1e1e1e] flex flex-col">
+          <h2 className="text-xl font-bold text-gray-200 mb-8">Controlla Dispositivo Remoto</h2>
+          <div className="bg-[#2d2d2d] p-6 rounded-lg border border-gray-700">
+            <label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-2 block">Inserisci ID partner</label>
+            <div className="flex space-x-4">
+              <input type="text" value={remoteId} onChange={(e) => setRemoteId(e.target.value.replace(/\\s/g, ''))} placeholder="Es. 123456789" className="flex-1 bg-black text-white text-2xl font-mono p-4 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
+              <button onClick={startConnection} disabled={!remoteId || remoteId === myId || !peerInstance} className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold px-8 rounded flex items-center shadow-lg transition-colors"><Play size={20} className="mr-2" /> Connetti</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {incomingRequest && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-[#252525] p-6 rounded-lg border border-gray-700 max-w-sm w-full shadow-2xl">
+            <div className="flex justify-center mb-4"><div className="bg-blue-500/20 p-4 rounded-full text-blue-400"><Monitor size={32} /></div></div>
+            <h3 className="text-xl font-bold text-center mb-2">Richiesta di Controllo</h3>
+            <p className="text-center text-gray-400 mb-6">L'utente con ID <strong className="text-white">{incomingRequest.callerId}</strong> vuole vedere il tuo schermo.</p>
+            <div className="flex space-x-3">
+              <button onClick={rejectRequest} className="flex-1 bg-gray-700 hover:bg-gray-600 py-3 rounded font-bold transition-colors">Rifiuta</button>
+              <button onClick={acceptRequest} className="flex-1 bg-green-600 hover:bg-green-500 py-3 rounded font-bold flex items-center justify-center transition-colors"><Check size={18} className="mr-2" /> Accetta</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+`;
     }
 
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
-    }
+    const MANIFEST_JSON = `{
+  "name": "NexusDesk P2P",
+  "short_name": "NexusDesk",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#1e1e1e",
+  "theme_color": "#1e1e1e",
+  "description": "App desktop remoto P2P via browser"
+}`;
 
-    // Avvio iniziale
-    updateIdentityUI();
-    renderDevices();
-    window.addEventListener('load', initPeerNetwork);
+    const SW_JS = `
+const CACHE_NAME = 'nexusdesk-v6-fixed';
+self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
+self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', e => {
+  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+});`;
 
-    if (window.location.hash.startsWith('#connect=')) {
-      const target = decodeURIComponent(window.location.hash.replace('#connect=', '')).replace(/-/g, ' ');
-      document.getElementById('remoteInputBox').value = target;
-      showToast('ID ' + target + ' caricato dal link! Clicca su Connetti allo Schermo.');
-    }
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+      const zip = new JSZip();
+      log("Generazione index.html (Senza Babel in runtime)...");
+      zip.file("index.html", PWA_INDEX_HTML);
+      
+      log("Aggiunta manifest.json e sw.js...");
+      zip.file("manifest.json", MANIFEST_JSON);
+      zip.file("sw.js", SW_JS);
+      zip.file(".nojekyll", "");
+      
+      log("Compressione ZIP in corso...");
+      zip.generateAsync({ type: "blob" }).then(function(content) {
+        saveAs(content, "NexusDesk-P2P-Fixed.zip");
+        log("✅ Download completato! Estrai e carica i file su GitHub.");
+      });
+    });
   </script>
 </body>
 </html>
