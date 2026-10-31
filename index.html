@@ -15,7 +15,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-      body { background-color: #1e1e1e; margin: 0; padding: 0; color: white; }
+      body { background-color: #1e1e1e; margin: 0; padding: 0; color: white; font-family: system-ui, -apple-system, sans-serif; }
       .no-select { user-select: none; -webkit-user-select: none; }
     </style>
 </head>
@@ -24,105 +24,195 @@
     
     <script type="text/babel">
       const { useState, useEffect, useRef } = React;
+
+      // Icone Vettoriali Integrate (definite fuori dal componente per evitare re-render inutili)
+      const Icons = {
+        Monitor: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>,
+        Copy: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>,
+        Check: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 6 9 17 4 12"/></svg>,
+        Play: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="5 3 19 12 5 21 5 3"/></svg>,
+        X: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
+        MousePointer2: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m14 14 3.12 3.12a.9.9 0 0 1-.64 1.53l-3.3.43-1.92 2.86A.9.9 0 0 1 10 21.4V2L22 13.5a.9.9 0 0 1-.5 1.62l-3.6.43-3.4 3.4z"/></svg>,
+        LinkIcon: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>,
+        Refresh: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+      };
+      const { Monitor, Copy, Check, Play, X, MousePointer2, LinkIcon, Refresh } = Icons;
       
       function App() {
-        // Stati dell'applicazione
         const [myId, setMyId] = useState('');
-        const [peerInstance, setPeerInstance] = useState(null);
+        const [peerReady, setPeerReady] = useState(false);
+        const [statusMsg, setStatusMsg] = useState('Connessione alla rete P2P...');
         const [remoteId, setRemoteId] = useState('');
         const [sessionState, setSessionState] = useState('idle'); // idle, connecting, connected, sharing
         const [remoteStream, setRemoteStream] = useState(null);
         const [incomingRequest, setIncomingRequest] = useState(null);
-        const [dataChannel, setDataChannel] = useState(null);
-        
-        // Riferimenti e UI
-        const videoRef = useRef(null);
         const [copied, setCopied] = useState(false);
         const [linkCopied, setLinkCopied] = useState(false);
         const [remoteCursor, setRemoteCursor] = useState(null);
+        const [connectedPeerId, setConnectedPeerId] = useState('');
 
-        // Icone Vettoriali Integrate (Sicure, zero crash)
-        const Icons = {
-          Monitor: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>,
-          Copy: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>,
-          Check: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 6 9 17 4 12"/></svg>,
-          Play: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="5 3 19 12 5 21 5 3"/></svg>,
-          X: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
-          MousePointer2: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m14 14 3.12 3.12a.9.9 0 0 1-.64 1.53l-3.3.43-1.92 2.86A.9.9 0 0 1 10 21.4V2L22 13.5a.9.9 0 0 1-.5 1.62l-3.6.43-3.4 3.4z"/></svg>,
-          LinkIcon: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-        };
-        const { Monitor, Copy, Check, Play, X, MousePointer2, LinkIcon } = Icons;
+        // Refs stabili (evitano bug di stato obsoleto dentro gli eventi WebRTC)
+        const peerRef = useRef(null);
+        const dataConnRef = useRef(null);
+        const mediaCallRef = useRef(null);
+        const localStreamRef = useRef(null);
+        const videoRef = useRef(null);
+        const connectTimeoutRef = useRef(null);
 
-        // Inizializzazione PeerJS e lettura link d'invito
-        useEffect(() => {
-          // Lettura dell'invito dall'URL
-          const urlParams = new URLSearchParams(window.location.search);
-          const inviteId = urlParams.get('id');
-          if (inviteId) setRemoteId(inviteId);
+        const generateNewId = () => Math.floor(100000000 + Math.random() * 900000000).toString();
 
-          // Genera o recupera il tuo ID
-          const storedId = localStorage.getItem('nexus_id') || Math.floor(100000000 + Math.random() * 900000000).toString();
+        const initPeer = (forcedId = null) => {
+          if (peerRef.current) {
+            try { peerRef.current.destroy(); } catch (e) {}
+          }
+          setPeerReady(false);
+          setStatusMsg('Allineamento server P2P...');
+
+          const storedId = forcedId || localStorage.getItem('nexus_id') || generateNewId();
           localStorage.setItem('nexus_id', storedId);
           setMyId(storedId);
 
-          // Avvio server P2P (WebRTC)
           const peer = new Peer(storedId, {
-            config: { 
-                'iceServers': [
-                    { urls: 'stun:stun.l.google.com:19302' }, 
-                    { urls: 'stun:global.stun.twilio.com:3478' }
-                ] 
+            config: {
+              iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:global.stun.twilio.com:3478' }
+              ]
             }
           });
 
-          peer.on('open', (id) => setPeerInstance(peer));
-          
+          peerRef.current = peer;
+
+          peer.on('open', (id) => {
+            setMyId(id);
+            setPeerReady(true);
+            setStatusMsg('Pronto e Online');
+          });
+
+          // Riconnessione automatica se il server di signaling cade in standby
+          peer.on('disconnected', () => {
+            setPeerReady(false);
+            setStatusMsg('Riconnessione in corso...');
+            try { peer.reconnect(); } catch (e) {}
+          });
+
           peer.on('error', (err) => {
             console.error("PeerJS Error:", err);
+            if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+
+            if (err.type === 'unavailable-id') {
+              // Se l'ID è rimasto bloccato da un refresh precedente, ne genera uno nuovo subito
+              const newId = generateNewId();
+              initPeer(newId);
+              return;
+            }
             if (err.type === 'peer-unavailable') {
-                alert("Il dispositivo remoto non è in linea. Verifica l'ID.");
-                setSessionState('idle');
+              alert("Il dispositivo remoto (" + remoteId + ") non è online o l'ID è errato.");
+              setSessionState('idle');
+            } else if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error') {
+              setStatusMsg('Rete instabile, riconnessione...');
+              setTimeout(() => {
+                if (peerRef.current && peerRef.current.disconnected) {
+                  try { peerRef.current.reconnect(); } catch (e) {}
+                }
+              }, 2000);
             }
           });
 
-          // Ascolto connessioni in entrata (Canale Dati)
+          // Ricezione Canale Dati
           peer.on('connection', (conn) => {
-            conn.on('data', (data) => {
-              if (data.type === 'request-control') setIncomingRequest({ callerId: data.from, connection: conn });
-              if (data.type === 'remote-click') {
-                setRemoteCursor({ x: data.x, y: data.y });
-                setTimeout(() => setRemoteCursor(null), 1000);
-              }
-            });
+            setupDataConnection(conn);
           });
 
-          // Ascolto chiamate video in entrata
+          // Ricezione Flusso Video (Quando l'Ospite chiama l'Host con lo schermo)
           peer.on('call', (call) => {
-            call.answer(); 
+            if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+            mediaCallRef.current = call;
+            setConnectedPeerId(call.peer);
+
+            call.answer();
+
             call.on('stream', (stream) => {
+              if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
               setRemoteStream(stream);
               setSessionState('connected');
             });
-            call.on('close', () => endSession());
-          });
 
-          return () => peer.destroy();
+            // Fallback diretto su ontrack per compatibilità con tutte le versioni di Chrome/Edge
+            if (call.peerConnection) {
+              call.peerConnection.ontrack = (event) => {
+                if (event.streams && event.streams[0]) {
+                  if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+                  setRemoteStream(event.streams[0]);
+                  setSessionState('connected');
+                }
+              };
+            }
+
+            call.on('close', () => endSession());
+            call.on('error', () => endSession());
+          });
+        };
+
+        const setupDataConnection = (conn) => {
+          dataConnRef.current = conn;
+
+          conn.on('data', (data) => {
+            if (!data || typeof data !== 'object') return;
+
+            if (data.type === 'request-control') {
+              setIncomingRequest({ callerId: data.from, connection: conn });
+            } else if (data.type === 'rejected') {
+              if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+              alert("Connessione non avviata.\nMotivo: " + (data.reason || "Rifiutata dall'utente."));
+              endSession();
+            } else if (data.type === 'remote-click') {
+              setRemoteCursor({ x: data.x, y: data.y });
+              setTimeout(() => setRemoteCursor(null), 1000);
+            } else if (data.type === 'end-session') {
+              endSession();
+            }
+          });
+        };
+
+        useEffect(() => {
+          const urlParams = new URLSearchParams(window.location.search);
+          const inviteId = urlParams.get('id');
+          if (inviteId) {
+            setRemoteId(inviteId.replace(/\D/g, ''));
+          }
+
+          initPeer();
+
+          return () => {
+            if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+            if (peerRef.current) peerRef.current.destroy();
+          };
         }, []);
 
-        // Avvio automatico del video con sistema anti blocco
+        // Aggancia lo stream video al tag <video> non appena disponibile
         useEffect(() => {
           if (videoRef.current && remoteStream) {
             videoRef.current.srcObject = remoteStream;
-            videoRef.current.play().catch(e => {
-                videoRef.current.muted = true;
-                videoRef.current.play();
-            });
+            const playPromise = videoRef.current.play();
+            if (playPromise !== undefined) {
+              playPromise.catch(() => {
+                if (videoRef.current) {
+                  videoRef.current.muted = true;
+                  videoRef.current.play().catch(e => console.error("Errore video:", e));
+                }
+              });
+            }
           }
         }, [remoteStream, sessionState]);
 
-        // Funzioni UI: Copia ID e Copia Link Invito
-        const copyId = () => { navigator.clipboard.writeText(myId); setCopied(true); setTimeout(() => setCopied(false), 2000); };
-        
+        const copyId = () => {
+          navigator.clipboard.writeText(myId);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        };
+
         const copyInviteLink = () => {
           const baseUrl = window.location.href.split('?')[0];
           const inviteUrl = `${baseUrl}?id=${myId}`;
@@ -131,106 +221,185 @@
           setTimeout(() => setLinkCopied(false), 2000);
         };
 
-        // Funzione: L'Host richiede il controllo
+        // AZIONE HOST: Richiedi di vedere e controllare lo schermo del partner
         const startConnection = () => {
-          if (!remoteId || remoteId === myId || !peerInstance) return;
+          const cleanRemoteId = remoteId.replace(/\D/g, '');
+          if (!cleanRemoteId || cleanRemoteId === myId || !peerRef.current) return;
+
+          // Se il server era in standby, forza la riconnessione prima di chiamare
+          if (peerRef.current.disconnected) {
+            peerRef.current.reconnect();
+          }
+
+          setConnectedPeerId(cleanRemoteId);
           setSessionState('connecting');
-          const conn = peerInstance.connect(remoteId);
-          
-          conn.on('open', () => { 
-            conn.send({ type: 'request-control', from: myId }); 
-            setDataChannel(conn); 
+
+          const conn = peerRef.current.connect(cleanRemoteId, { reliable: true });
+          setupDataConnection(conn);
+
+          // Timeout di sicurezza di 35 secondi per non lasciare mai la rotellina bloccata all'infinito
+          if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+          connectTimeoutRef.current = setTimeout(() => {
+            setSessionState((current) => {
+              if (current === 'connecting') {
+                alert("Tempo scaduto: l'ospite non ha risposto o non è raggiungibile.");
+                return 'idle';
+              }
+              return current;
+            });
+          }, 35000);
+
+          conn.on('open', () => {
+            conn.send({ type: 'request-control', from: myId });
           });
-          
-          conn.on('data', (data) => { 
-            if (data.type === 'rejected') { 
-              alert(`Connessione non avviata.\nMotivo: ${data.reason || "L'utente ha rifiutato o annullato."}`); 
-              endSession(); 
-            } 
+
+          conn.on('error', (err) => {
+            console.error("DataConn Error:", err);
+            if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+            alert("Errore durante il collegamento al dispositivo remoto.");
+            endSession();
           });
-          
-          conn.on('close', () => endSession());
         };
 
-        // Funzione: Invia i click del mouse all'ospite
-        const handleVideoClick = (e) => {
-          if (!dataChannel || sessionState !== 'connected') return;
-          const rect = videoRef.current.getBoundingClientRect();
-          const x = (e.clientX - rect.left) / rect.width;
-          const y = (e.clientY - rect.top) / rect.height;
-          dataChannel.send({ type: 'remote-click', x, y });
-        };
-
-        // Funzione: L'Ospite accetta e condivide lo schermo
+        // AZIONE OSPITE: Accetta la richiesta e avvia la condivisione schermo
         const acceptRequest = async () => {
           const currentRequest = incomingRequest;
-          if (!currentRequest) return;
+          if (!currentRequest || !peerRef.current) return;
 
           try {
-            const stream = await navigator.mediaDevices.getDisplayMedia({ 
-                video: { cursor: "always", displaySurface: "monitor" }, 
-                audio: false 
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+              video: { cursor: "always" },
+              audio: false
             });
-            
-            const call = peerInstance.call(currentRequest.callerId, stream);
-            setDataChannel(currentRequest.connection);
+
+            localStreamRef.current = stream;
+            setConnectedPeerId(currentRequest.callerId);
+            dataConnRef.current = currentRequest.connection;
+
+            const call = peerRef.current.call(currentRequest.callerId, stream);
+            mediaCallRef.current = call;
+
             setSessionState('sharing');
             setIncomingRequest(null);
-            
-            stream.getVideoTracks()[0].onended = () => { call.close(); endSession(); };
+
+            stream.getVideoTracks()[0].onended = () => {
+              endSession();
+            };
           } catch (err) {
-            console.error("Cattura schermo bloccata:", err);
-            alert("Impossibile condividere lo schermo.\nAssicurati di essere su un computer e di aver selezionato una finestra nel popup.\nErrore browser: " + err.message);
-            
-            if (currentRequest && currentRequest.connection) {
-                currentRequest.connection.send({ type: 'rejected', reason: err.message });
+            console.error("Cattura schermo annullata o bloccata:", err);
+            alert("Condivisione schermo non avviata.\nAssicurati di selezionare lo schermo intero o una finestra e premere 'Condividi'.");
+            if (currentRequest.connection && currentRequest.connection.open) {
+              currentRequest.connection.send({ type: 'rejected', reason: "L'ospite ha annullato la selezione dello schermo." });
             }
             setIncomingRequest(null);
           }
         };
 
+        // AZIONE RAPIDA INVITO: Invia direttamente il tuo schermo all'ID che ti ha invitato
+        const shareMyScreenDirectly = async () => {
+          const cleanRemoteId = remoteId.replace(/\D/g, '');
+          if (!cleanRemoteId || cleanRemoteId === myId || !peerRef.current) return;
+
+          try {
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+              video: { cursor: "always" },
+              audio: false
+            });
+
+            localStreamRef.current = stream;
+            setConnectedPeerId(cleanRemoteId);
+
+            const conn = peerRef.current.connect(cleanRemoteId, { reliable: true });
+            setupDataConnection(conn);
+
+            const call = peerRef.current.call(cleanRemoteId, stream);
+            mediaCallRef.current = call;
+
+            setSessionState('sharing');
+
+            stream.getVideoTracks()[0].onended = () => {
+              endSession();
+            };
+          } catch (err) {
+            console.error("Condivisione diretta annullata:", err);
+          }
+        };
+
         const rejectRequest = () => {
-          if (incomingRequest && incomingRequest.connection) {
-              incomingRequest.connection.send({ type: 'rejected', reason: "L'utente ha premuto Rifiuta." });
+          if (incomingRequest && incomingRequest.connection && incomingRequest.connection.open) {
+            incomingRequest.connection.send({ type: 'rejected', reason: "L'utente ha premuto Rifiuta." });
           }
           setIncomingRequest(null);
         };
 
-        const endSession = () => {
-          if (remoteStream) remoteStream.getTracks().forEach(track => track.stop());
-          setRemoteStream(null);
-          setSessionState('idle');
-          setDataChannel(null);
-          // Pulisce l'URL se la persona è entrata tramite link
-          window.history.replaceState({}, document.title, window.location.pathname);
+        const handleVideoClick = (e) => {
+          if (!dataConnRef.current || !dataConnRef.current.open || sessionState !== 'connected') return;
+          const rect = videoRef.current.getBoundingClientRect();
+          const x = (e.clientX - rect.left) / rect.width;
+          const y = (e.clientY - rect.top) / rect.height;
+          dataConnRef.current.send({ type: 'remote-click', x, y });
         };
 
-        // RENDERING DELLA SCHERMATA: L'HOST GUARDA IL VIDEO
+        const endSession = () => {
+          if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+
+          if (dataConnRef.current && dataConnRef.current.open) {
+            try { dataConnRef.current.send({ type: 'end-session' }); } catch (e) {}
+          }
+          if (mediaCallRef.current) {
+            try { mediaCallRef.current.close(); } catch (e) {}
+            mediaCallRef.current = null;
+          }
+          if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => track.stop());
+            localStreamRef.current = null;
+          }
+          if (remoteStream) {
+            remoteStream.getTracks().forEach(track => track.stop());
+            setRemoteStream(null);
+          }
+
+          setSessionState('idle');
+          setIncomingRequest(null);
+        };
+
+        const cleanInputId = remoteId.replace(/\D/g, '');
+        const canConnect = peerReady && cleanInputId.length >= 6 && cleanInputId !== myId;
+
+        // SCHERMATA: CONTROLLO REMOTO (HOST)
         if (sessionState === 'connected' || sessionState === 'connecting') {
           return (
             <div className="flex flex-col h-screen bg-[#111111] text-white font-sans no-select">
               <div className="bg-[#1e1e1e] border-b border-gray-800 flex items-center px-4 py-2">
                 <div className="flex items-center space-x-2 bg-[#2d2d2d] px-4 py-2 rounded-t-lg border-t-2 border-blue-500">
                   <Monitor size={16} className="text-blue-400" />
-                  <span className="font-semibold text-sm">Sessione: {remoteId}</span>
-                  <button onClick={endSession} className="ml-4 hover:bg-red-500 rounded-full p-1"><X size={14} /></button>
+                  <span className="font-semibold text-sm">Sessione: {connectedPeerId || remoteId}</span>
+                  <button onClick={endSession} className="ml-4 hover:bg-red-500 rounded-full p-1 transition-colors"><X size={14} /></button>
                 </div>
               </div>
               <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden">
                 {sessionState === 'connecting' ? (
-                  <div className="flex flex-col items-center">
+                  <div className="flex flex-col items-center text-center px-4">
                     <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-                    <p className="text-gray-400">In attesa che l'ospite ({remoteId}) selezioni lo schermo...</p>
-                    <button onClick={endSession} className="mt-6 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-sm">Annulla</button>
+                    <p className="text-gray-200 font-semibold text-lg mb-1">Richiesta inviata a {connectedPeerId || remoteId}</p>
+                    <p className="text-gray-400 text-sm max-w-md">L'ospite deve cliccare su <strong>"Accetta"</strong>, selezionare la miniatura dello schermo nel popup del browser e premere <strong>"Condividi"</strong>.</p>
+                    <button onClick={endSession} className="mt-6 px-5 py-2 bg-gray-800 hover:bg-gray-700 rounded text-sm font-semibold">Annulla</button>
                   </div>
                 ) : (
                   <>
-                    <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-[#2d2d2d] rounded-lg shadow-xl px-4 py-2 flex space-x-4 border border-gray-700 z-10 opacity-75 hover:opacity-100">
-                      <div className="flex items-center text-xs text-gray-300"><MousePointer2 size={16} className="mr-2" /> Clicca per interagire</div>
+                    <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-[#2d2d2d]/90 rounded-lg shadow-xl px-4 py-2 flex space-x-4 border border-gray-700 z-10 opacity-80 hover:opacity-100 transition-opacity">
+                      <div className="flex items-center text-xs text-gray-300"><MousePointer2 size={16} className="mr-2 text-blue-400" /> Clicca sullo schermo per inviare il puntatore</div>
                       <div className="w-px bg-gray-600 h-4 my-auto"></div>
-                      <button onClick={endSession} className="flex items-center text-xs text-red-400 hover:text-red-300">Disconnetti</button>
+                      <button onClick={endSession} className="flex items-center text-xs text-red-400 hover:text-red-300 font-semibold">Disconnetti</button>
                     </div>
-                    <video ref={videoRef} autoPlay playsInline muted onClick={handleVideoClick} className="max-w-full max-h-full object-contain cursor-crosshair" />
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      onClick={handleVideoClick}
+                      className="w-full h-full object-contain cursor-crosshair"
+                    />
                   </>
                 )}
               </div>
@@ -238,87 +407,133 @@
           );
         }
 
-        // RENDERING DELLA SCHERMATA: L'OSPITE CONDIVIDE
+        // SCHERMATA: CONDIVISIONE ATTIVA (OSPITE)
         if (sessionState === 'sharing') {
           return (
-            <div className="flex flex-col h-screen bg-[#111111] text-white items-center justify-center no-select">
+            <div className="flex flex-col h-screen bg-[#111111] text-white items-center justify-center no-select px-4 text-center">
               <Monitor size={64} className="text-green-500 mb-6 animate-pulse" />
-              <h2 className="text-2xl font-bold mb-2">Stai condividendo lo schermo</h2>
-              <p className="text-gray-400 mb-8">L'host ({incomingRequest?.callerId || 'remoto'}) è collegato.</p>
-              <button onClick={endSession} className="px-6 py-3 bg-red-600 hover:bg-red-700 font-bold rounded-lg flex items-center"><X size={18} className="mr-2" /> Termina Condivisione</button>
+              <h2 className="text-2xl font-bold mb-2">Condivisione Schermo Attiva</h2>
+              <p className="text-gray-400 mb-8">Il dispositivo <strong className="text-white font-mono">{connectedPeerId}</strong> sta visualizzando il tuo schermo.</p>
+              <button onClick={endSession} className="px-6 py-3 bg-red-600 hover:bg-red-700 font-bold rounded-lg flex items-center shadow-lg transition-colors">
+                <X size={18} className="mr-2" /> Termina Condivisione
+              </button>
               
-              {/* Cursore laser rosso inviato dall'host */}
               {remoteCursor && (
-                <div className="fixed w-8 h-8 rounded-full border-4 border-red-500 bg-red-500/30 shadow-[0_0_15px_red] pointer-events-none z-50 animate-ping"
-                  style={{ left: `${remoteCursor.x * 100}vw`, top: `${remoteCursor.y * 100}vh`, transform: 'translate(-50%, -50%)' }} />
+                <div
+                  className="fixed w-8 h-8 rounded-full border-4 border-red-500 bg-red-500/30 shadow-[0_0_15px_red] pointer-events-none z-50 animate-ping"
+                  style={{ left: `${remoteCursor.x * 100}vw`, top: `${remoteCursor.y * 100}vh`, transform: 'translate(-50%, -50%)' }}
+                />
               )}
             </div>
           );
         }
 
-        // RENDERING DELLA SCHERMATA: HOME (Menu Principale)
+        // SCHERMATA: HOME (SPLIT PANE STILE ANYDESK / RUSTDESK)
         return (
           <div className="flex flex-col h-screen bg-[#1e1e1e] text-white font-sans overflow-hidden no-select">
-            <div className="bg-[#181818] border-b border-black flex items-center px-2 py-1">
-              <div className="flex items-center space-x-2 bg-[#2d2d2d] px-4 py-2 rounded-t-md shadow-inner border-t-2 border-blue-500 text-sm"><Monitor size={16} /><span className="font-semibold">Nuova Connessione</span></div>
+            {/* Barra Superiore con Stato Rete */}
+            <div className="bg-[#181818] border-b border-black flex items-center justify-between px-3 py-1.5">
+              <div className="flex items-center space-x-2 bg-[#2d2d2d] px-4 py-1.5 rounded-t-md border-t-2 border-blue-500 text-sm">
+                <Monitor size={16} className="text-blue-400" />
+                <span className="font-semibold">Nuova Connessione</span>
+              </div>
+              <div className="flex items-center space-x-3 text-xs">
+                <span className="flex items-center text-gray-300">
+                  <span className={`w-2.5 h-2.5 rounded-full mr-2 ${peerReady ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-yellow-500 animate-pulse'}`}></span>
+                  {statusMsg}
+                </span>
+                <button onClick={() => initPeer()} className="text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800" title="Riconnetti alla rete P2P">
+                  <Refresh size={15} />
+                </button>
+              </div>
             </div>
             
-            <div className="flex flex-1 overflow-hidden">
-              {/* Pannello Sinistro: Il Tuo PC */}
-              <div className="w-1/2 p-10 bg-[#252525] flex flex-col shadow-2xl z-10 border-r border-[#111]">
-                <h2 className="text-xl font-bold text-gray-200 mb-8">Questo Dispositivo</h2>
+            <div className="flex flex-col md:flex-row flex-1 overflow-y-auto">
+              {/* Pannello Sinistro: Questo Dispositivo */}
+              <div className="w-full md:w-1/2 p-8 md:p-10 bg-[#252525] flex flex-col shadow-2xl z-10 border-b md:border-b-0 md:border-r border-[#111]">
+                <h2 className="text-xl font-bold text-gray-200 mb-6">Questo Dispositivo</h2>
                 
                 <div className="bg-[#1e1e1e] p-6 rounded-lg border border-gray-700 shadow-inner">
-                  <div className="mb-4">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-2 block">Il tuo ID</label>
-                    <div className="flex items-center justify-between bg-black p-4 rounded text-3xl font-mono tracking-widest text-blue-400">
+                  <div className="mb-5">
+                    <label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-2 block">Il tuo ID (Comunicalo al partner)</label>
+                    <div className="flex items-center justify-between bg-black p-4 rounded text-2xl md:text-3xl font-mono tracking-widest text-blue-400 border border-gray-800">
                       <span>{myId ? `${myId.slice(0,3)} ${myId.slice(3,6)} ${myId.slice(6,9)}` : '...'}</span>
-                      <button onClick={copyId} className="text-gray-500 hover:text-white p-2 transition-colors" title="Copia ID">
+                      <button onClick={copyId} className="text-gray-400 hover:text-white p-2 transition-colors" title="Copia ID">
                         {copied ? <Check size={24} className="text-green-500" /> : <Copy size={24} />}
                       </button>
                     </div>
                   </div>
                   
-                  {/* Pulsante Copia Link Invito */}
                   <div className="mb-6">
-                    <button onClick={copyInviteLink} className="flex items-center text-sm font-semibold text-blue-400 hover:text-blue-300 transition-colors">
+                    <button onClick={copyInviteLink} className="w-full py-2.5 px-4 bg-[#2a2a2a] hover:bg-[#333] border border-gray-600 rounded flex items-center justify-center text-sm font-semibold text-blue-400 hover:text-blue-300 transition-colors">
                       {linkCopied ? <Check size={16} className="mr-2 text-green-500" /> : <LinkIcon size={16} className="mr-2" />}
-                      {linkCopied ? 'Link copiato negli appunti!' : 'Copia Link di Invito da inviare'}
+                      {linkCopied ? 'Link di invito copiato negli appunti!' : 'Copia Link di Invito da inviare'}
                     </button>
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-2 block">Password</label>
-                    <div className="text-gray-300 text-lg font-mono tracking-widest">********</div>
+                    <label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-1 block">Stato Sicurezza</label>
+                    <div className="text-gray-400 text-xs">Connessione P2P protetta da crittografia WebRTC con conferma manuale.</div>
                   </div>
                 </div>
               </div>
               
-              {/* Pannello Destro: PC Remoto */}
-              <div className="w-1/2 p-10 bg-[#1e1e1e] flex flex-col">
-                <h2 className="text-xl font-bold text-gray-200 mb-8">Controlla Dispositivo Remoto</h2>
+              {/* Pannello Destro: Controlla Dispositivo Remoto */}
+              <div className="w-full md:w-1/2 p-8 md:p-10 bg-[#1e1e1e] flex flex-col">
+                <h2 className="text-xl font-bold text-gray-200 mb-6">Controlla Dispositivo Remoto</h2>
                 
                 <div className="bg-[#2d2d2d] p-6 rounded-lg border border-gray-700">
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-2 block">Inserisci ID partner</label>
-                  <div className="flex space-x-4">
-                    <input type="text" value={remoteId} onChange={(e) => setRemoteId(e.target.value.replace(/\s/g, ''))} placeholder="Es. 123456789" className="flex-1 bg-black text-white text-2xl font-mono p-4 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
-                    <button onClick={startConnection} disabled={!remoteId || remoteId === myId || !peerInstance} className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold px-8 rounded flex items-center shadow-lg transition-colors">
+                  <label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-2 block">Inserisci ID partner (9 cifre)</label>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <input
+                      type="text"
+                      value={remoteId}
+                      onChange={(e) => setRemoteId(e.target.value.replace(/[^\d\s]/g, ''))}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && canConnect) startConnection(); }}
+                      placeholder="Es. 123 456 789"
+                      className="flex-1 bg-black text-white text-2xl font-mono p-4 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={startConnection}
+                      disabled={!canConnect}
+                      className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold px-6 py-4 rounded flex items-center justify-center shadow-lg transition-colors cursor-pointer disabled:cursor-not-allowed"
+                    >
                       <Play size={20} className="mr-2" /> Connetti
                     </button>
                   </div>
+
+                  {cleanInputId === myId && cleanInputId !== '' && (
+                    <p className="text-xs text-yellow-400 mt-3">Hai inserito il tuo stesso ID. Inserisci l'ID dell'altro computer.</p>
+                  )}
+
+                  {/* Pulsante secondario utile se l'affiliato ha aperto il tuo Link d'Invito */}
+                  {canConnect && (
+                    <div className="mt-4 pt-4 border-t border-gray-700 flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Vuoi mostrare il tuo schermo a questo ID?</span>
+                      <button
+                        onClick={shareMyScreenDirectly}
+                        className="text-xs bg-green-700 hover:bg-green-600 text-white font-semibold px-3 py-2 rounded transition-colors"
+                      >
+                        Condividi il mio schermo
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Popup Richiesta di Controllo */}
+            {/* Popup Richiesta di Controllo in Arrivo */}
             {incomingRequest && (
-              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
                 <div className="bg-[#252525] p-6 rounded-lg border border-gray-700 max-w-sm w-full shadow-2xl">
                   <div className="flex justify-center mb-4">
                     <div className="bg-blue-500/20 p-4 rounded-full text-blue-400"><Monitor size={32} /></div>
                   </div>
                   <h3 className="text-xl font-bold text-center mb-2">Richiesta di Controllo</h3>
-                  <p className="text-center text-gray-400 mb-6">L'utente <strong className="text-white font-mono">{incomingRequest.callerId}</strong> vuole collegarsi al tuo schermo.</p>
+                  <p className="text-center text-gray-300 text-sm mb-6">
+                    L'utente <strong className="text-white font-mono">{incomingRequest.callerId}</strong> chiede di visualizzare il tuo schermo.<br/>
+                    <span className="text-xs text-gray-400 block mt-2">Dopo aver cliccato su Accetta, seleziona lo schermo nel popup del browser e premi "Condividi".</span>
+                  </p>
                   <div className="flex space-x-3">
                     <button onClick={rejectRequest} className="flex-1 bg-gray-700 hover:bg-gray-600 py-3 rounded font-bold transition-colors">Rifiuta</button>
                     <button onClick={acceptRequest} className="flex-1 bg-green-600 hover:bg-green-500 py-3 rounded font-bold flex items-center justify-center transition-colors"><Check size={18} className="mr-2" /> Accetta</button>
@@ -330,7 +545,7 @@
         );
       }
 
-      // Sistema Scudo Anti-Crash per React
+      // Scudo Anti-Crash React
       class ErrorBoundary extends React.Component {
         constructor(props) { super(props); this.state = { hasError: false, error: null }; }
         static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -338,7 +553,7 @@
           if (this.state.hasError) {
             return (
               <div style={{padding: '40px', color: '#ff6b6b', backgroundColor: '#1e1e1e', height: '100vh', fontFamily: 'monospace'}}>
-                <h2>❌ Crash Interfaccia Rilevato</h2>
+                <h2>Errore Interfaccia Rilevato</h2>
                 <pre style={{backgroundColor: '#000', padding: '20px', overflow: 'auto', border: '1px solid #333'}}>{this.state.error.toString()}</pre>
                 <button onClick={() => window.location.reload()} style={{marginTop: '20px', padding: '10px 20px', background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '5px'}}>Riavvia App</button>
               </div>
@@ -348,12 +563,10 @@
         }
       }
 
-      // Avvio dell'App
       const root = ReactDOM.createRoot(document.getElementById('root'));
       root.render(<ErrorBoundary><App /></ErrorBoundary>);
     </script>
     
-    <!-- Registrazione Service Worker per PWA offline -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => { 
