@@ -90,10 +90,11 @@ ipcMain.on('execute-native-input', (event, data) => {
 
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.size;
-
-  // FIX PRECISIONE: Calcolo diretto. Rimuove il conflitto con lo zoom del 125/150% di Windows.
-  const targetX = Math.round(data.x * width);
-  const targetY = Math.round(data.y * height);
+  
+  // RIPRISTINATO: Serve per non sfalsare la mira se l'ospite usa lo zoom di Windows (125%, 150%)
+  const scaleFactor = primaryDisplay.scaleFactor || 1;
+  const targetX = Math.round(data.x * width * scaleFactor);
+  const targetY = Math.round(data.y * height * scaleFactor);
 
   if (data.action === 'move') {
     sendHardwareCommand(`[NexusInput]::Move(${targetX}, ${targetY})`);
