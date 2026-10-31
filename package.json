@@ -1,0 +1,26 @@
+{
+  "name": "nexusdesk-native",
+  "version": "1.0.0",
+  "description": "NexusDesk P2P - Controllo Remoto Nativo",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable"
+  },
+  "author": "NexusDesk",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.nexusdesk.p2p",
+    "productName": "NexusDesk",
+    "win": {
+      "target": "portable"
+    },
+    "portable": {
+      "artifactName": "NexusDesk-Portable.exe"
+    }
+  }
+}
