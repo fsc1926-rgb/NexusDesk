@@ -17,6 +17,8 @@
       body { background-color: #1e1e1e; margin: 0; padding: 0; color: white; font-family: system-ui, -apple-system, sans-serif; overflow: hidden; }
       .no-select { user-select: none; -webkit-user-select: none; }
       ::-webkit-scrollbar { width: 0px; background: transparent; }
+      /* Nasconde forzatamente il cursore host se in controllo */
+      .force-hide-cursor * { cursor: none !important; }
     </style>
 </head>
 <body>
@@ -66,7 +68,6 @@
 
         const generateNewId = () => Math.floor(100000000 + Math.random() * 900000000).toString();
 
-        // Cattura schermo automatica (nativa su .exe, standard su browser)
         const captureScreenStream = async () => {
           if (isNativeApp) {
             const sourceId = await window.nexusNative.getPrimaryScreenId();
@@ -74,21 +75,12 @@
               return await navigator.mediaDevices.getUserMedia({
                 audio: false,
                 video: {
-                  mandatory: {
-                    chromeMediaSource: 'desktop',
-                    chromeMediaSourceId: sourceId,
-                    maxWidth: 1920,
-                    maxHeight: 1080,
-                    maxFrameRate: 30
-                  }
+                  mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId, maxWidth: 1920, maxHeight: 1080, maxFrameRate: 30 }
                 }
               });
             }
           }
-          return await navigator.mediaDevices.getDisplayMedia({
-            video: { cursor: "always", displaySurface: "monitor" },
-            audio: false
-          });
+          return await navigator.mediaDevices.getDisplayMedia({ video: { cursor: "always", displaySurface: "monitor" }, audio: false });
         };
 
         const initPeer = (forcedId = null) => {
@@ -101,49 +93,25 @@
           setMyId(storedId);
 
           const peer = new Peer(storedId, {
-            config: {
-              iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:global.stun.twilio.com:3478' }
-              ]
-            }
+            config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:global.stun.twilio.com:3478' }] }
           });
 
           peerRef.current = peer;
 
-          peer.on('open', (id) => {
-            setMyId(id);
-            setPeerReady(true);
-            setStatusMsg('Pronto e Online');
-          });
-
-          peer.on('disconnected', () => {
-            setPeerReady(false);
-            setStatusMsg('Riconnessione...');
-            try { peer.reconnect(); } catch (e) {}
-          });
-
+          peer.on('open', (id) => { setMyId(id); setPeerReady(true); setStatusMsg('Pronto e Online'); });
+          peer.on('disconnected', () => { setPeerReady(false); setStatusMsg('Riconnessione...'); try { peer.reconnect(); } catch (e) {} });
           peer.on('error', (err) => {
             if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
             if (err.type === 'unavailable-id') { initPeer(generateNewId()); return; }
-            if (err.type === 'peer-unavailable') {
-              alert("Il dispositivo remoto non è online.");
-              setSessionState('idle');
-            }
+            if (err.type === 'peer-unavailable') { alert("Il dispositivo remoto non è online."); setSessionState('idle'); }
           });
-
           peer.on('connection', (conn) => { setupDataConnection(conn); });
-
           peer.on('call', (call) => {
             if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
             mediaCallRef.current = call;
             setConnectedPeerId(call.peer);
             call.answer();
-
-            call.on('stream', (stream) => {
-              setRemoteStream(stream);
-              setSessionState('connected');
-            });
+            call.on('stream', (stream) => { setRemoteStream(stream); setSessionState('connected'); });
             call.on('close', () => endSession());
           });
         };
@@ -159,17 +127,13 @@
               alert("Connessione rifiutata dall'ospite.");
               endSession();
             } else if (data.type === 'remote-input') {
-              // Se l'ospite usa il programma .exe, muove fisicamente il mouse e la tastiera di Windows!
               if (isNativeApp) {
                 window.nexusNative.sendNativeInput(data);
               } else if (data.action === 'click') {
-                // Fallback visivo se l'ospite è solo su browser
                 setRemoteCursor({ x: data.x, y: data.y });
                 setTimeout(() => setRemoteCursor(null), 1000);
               }
-            } else if (data.type === 'end-session') {
-              endSession();
-            }
+            } else if (data.type === 'end-session') { endSession(); }
           });
         };
 
@@ -187,17 +151,13 @@
         useEffect(() => {
           if (videoRef.current && remoteStream) {
             videoRef.current.srcObject = remoteStream;
-            videoRef.current.play().catch(() => {
-              if (videoRef.current) { videoRef.current.muted = true; videoRef.current.play(); }
-            });
+            videoRef.current.play().catch(() => { if (videoRef.current) { videoRef.current.muted = true; videoRef.current.play(); } });
           }
         }, [remoteStream, sessionState]);
 
         const copyId = () => { navigator.clipboard.writeText(myId); setCopied(true); setTimeout(() => setCopied(false), 2000); };
         const copyInviteLink = () => {
-          const baseUrl = window.location.href.startsWith('file://') 
-            ? 'https://fsc1926-rgb.github.io/NexusDesk/' 
-            : window.location.href.split('?')[0];
+          const baseUrl = window.location.href.startsWith('file://') ? 'https://fsc1926-rgb.github.io/NexusDesk/' : window.location.href.split('?')[0];
           navigator.clipboard.writeText(`${baseUrl}?id=${myId}`);
           setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000);
         };
@@ -214,9 +174,7 @@
           setupDataConnection(conn);
 
           if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
-          connectTimeoutRef.current = setTimeout(() => {
-            setSessionState(curr => curr === 'connecting' ? 'idle' : curr);
-          }, 35000);
+          connectTimeoutRef.current = setTimeout(() => { setSessionState(curr => curr === 'connecting' ? 'idle' : curr); }, 35000);
 
           conn.on('open', () => { conn.send({ type: 'request-control', from: myId }); });
         };
@@ -276,14 +234,10 @@
 
         const toggleFullscreen = () => {
           if (!fullscreenContainerRef.current) return;
-          if (!document.fullscreenElement) {
-            fullscreenContainerRef.current.requestFullscreen().catch(() => {});
-          } else {
-            document.exitFullscreen();
-          }
+          if (!document.fullscreenElement) { fullscreenContainerRef.current.requestFullscreen().catch(() => {}); } 
+          else { document.exitFullscreen(); }
         };
 
-        // Calcolo millimetrico delle coordinate sul frame video reale (esclude le bande nere)
         const getPreciseCoordinates = (e) => {
           const video = videoRef.current;
           if (!video) return null;
@@ -306,9 +260,7 @@
           const clickX = e.clientX - rect.left;
           const clickY = e.clientY - rect.top;
 
-          if (clickX < offsetX || clickX > offsetX + displayW || clickY < offsetY || clickY > offsetY + displayH) {
-            return null;
-          }
+          if (clickX < offsetX || clickX > offsetX + displayW || clickY < offsetY || clickY > offsetY + displayH) return null;
 
           const x = Math.max(0, Math.min(1, (clickX - offsetX) / displayW));
           const y = Math.max(0, Math.min(1, (clickY - offsetY) / displayH));
@@ -326,7 +278,7 @@
 
           if (action === 'move') {
             const now = Date.now();
-            if (now - lastMoveRef.current < 35) return; // Limita a ~30 aggiornamenti al secondo per fluidità totale
+            if (now - lastMoveRef.current < 35) return;
             lastMoveRef.current = now;
           }
 
@@ -338,14 +290,9 @@
 
         const canConnect = peerReady && remoteId.replace(/\D/g, '').length >= 6 && remoteId.replace(/\D/g, '') !== myId;
 
-        // --- HOST: VISUALIZZAZIONE E CONTROLLO ---
         if (sessionState === 'connected' || sessionState === 'connecting') {
           return (
-            <div 
-              className="flex flex-col h-screen bg-[#111111] text-white font-sans no-select outline-none" 
-              tabIndex="0" 
-              onKeyDown={(e) => sendInput('keydown', e)}
-            >
+            <div className={`flex flex-col h-screen bg-[#111111] text-white font-sans no-select outline-none ${controlMode ? 'force-hide-cursor' : ''}`} tabIndex="0" onKeyDown={(e) => sendInput('keydown', e)}>
               {!isFullscreen && (
                 <div className="bg-[#1e1e1e] border-b border-gray-800 flex items-center justify-between px-4 py-2">
                   <div className="flex items-center space-x-2 bg-[#2d2d2d] px-4 py-1.5 rounded-t-lg border-t-2 border-blue-500">
@@ -354,16 +301,10 @@
                     <button onClick={endSession} className="ml-4 hover:bg-red-500 rounded-full p-1 transition-colors"><X size={14} /></button>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <button 
-                      onClick={() => setControlMode(!controlMode)} 
-                      className={`px-3 py-1 rounded text-xs font-bold flex items-center ${controlMode ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300'}`}
-                    >
-                      <MousePointer2 size={14} className="mr-1.5" />
-                      {controlMode ? 'Controllo Mouse/Tastiera ATTIVO' : 'Solo Visualizzazione'}
+                    <button onClick={() => setControlMode(!controlMode)} className={`px-3 py-1 rounded text-xs font-bold flex items-center ${controlMode ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300'}`}>
+                      <MousePointer2 size={14} className="mr-1.5" /> {controlMode ? 'Controllo ATTIVO' : 'Solo Visuale'}
                     </button>
-                    <button onClick={toggleFullscreen} className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded text-xs flex items-center">
-                      <Maximize size={14} className="mr-1.5" /> Schermo Intero
-                    </button>
+                    <button onClick={toggleFullscreen} className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded text-xs flex items-center"><Maximize size={14} className="mr-1.5" /> Schermo Intero</button>
                   </div>
                 </div>
               )}
@@ -372,7 +313,7 @@
                 {sessionState === 'connecting' ? (
                   <div className="flex flex-col items-center text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-blue-500 mb-4"></div>
-                    <p className="text-gray-300">In attesa che l'ospite accetti il controllo remoto...</p>
+                    <p className="text-gray-300">In attesa che l'ospite accetti...</p>
                     <button onClick={endSession} className="mt-4 px-4 py-2 bg-gray-800 rounded">Annulla</button>
                   </div>
                 ) : (
@@ -385,7 +326,7 @@
                     onClick={(e) => sendInput('click', e)}
                     onDoubleClick={(e) => sendInput('dblclick', e)}
                     onContextMenu={(e) => { e.preventDefault(); sendInput('rightclick', e); }}
-                    className={`w-full h-full object-contain ${controlMode ? 'cursor-crosshair' : 'cursor-default'}`}
+                    className="w-full h-full object-contain"
                   />
                 )}
               </div>
@@ -393,7 +334,6 @@
           );
         }
 
-        // --- OSPITE: CONDIVISIONE ATTIVA ---
         if (sessionState === 'sharing') {
           return (
             <div className="flex flex-col h-screen bg-[#111111] text-white items-center justify-center no-select px-4 text-center">
@@ -402,9 +342,7 @@
               <p className="text-gray-400 mb-6">L'operatore <strong className="text-white">{connectedPeerId}</strong> è collegato al tuo computer.</p>
               
               <div className="bg-[#1e1e1e] p-4 rounded-lg border border-gray-700 text-xs text-gray-300 mb-8 max-w-md">
-                 {isNativeApp 
-                   ? "✅ Controllo Nativo Attivo: L'operatore può muovere il cursore e digitare sul tuo computer. Puoi ridurre a icona questa finestra."
-                   : "⚠️ Modalità Web: Per consentire all'operatore di muovere fisicamente il tuo mouse su tutto Windows, avvia NexusDesk-Portable.exe."}
+                 {isNativeApp ? "✅ Controllo Nativo Attivo. Puoi ridurre a icona questa finestra." : "⚠️ Modalità Web: Scarica e apri il file .exe per abilitare il controllo totale del mouse."}
               </div>
 
               <button onClick={endSession} className="px-6 py-3 bg-red-600 hover:bg-red-500 font-bold rounded-lg flex items-center transition-colors">
@@ -412,22 +350,18 @@
               </button>
               
               {!isNativeApp && remoteCursor && (
-                <div
-                  className="fixed pointer-events-none z-50 w-8 h-8 border-4 border-red-500 bg-red-500/40 rounded-full shadow-[0_0_20px_red] animate-ping"
-                  style={{ left: `${remoteCursor.x * 100}vw`, top: `${remoteCursor.y * 100}vh`, transform: 'translate(-50%, -50%)' }}
-                />
+                <div className="fixed pointer-events-none z-50 w-8 h-8 border-4 border-red-500 bg-red-500/40 rounded-full shadow-[0_0_20px_red] animate-ping" style={{ left: `${remoteCursor.x * 100}vw`, top: `${remoteCursor.y * 100}vh`, transform: 'translate(-50%, -50%)' }} />
               )}
             </div>
           );
         }
 
-        // --- HOME ---
         return (
           <div className="flex flex-col h-screen bg-[#1e1e1e] text-white font-sans overflow-hidden no-select">
             <div className="bg-[#181818] border-b border-black flex items-center justify-between px-3 py-1.5">
               <div className="flex items-center space-x-2 bg-[#2d2d2d] px-4 py-1.5 rounded-t-md border-t-2 border-blue-500 text-sm">
                 <Monitor size={16} className="text-blue-400" />
-                <span className="font-semibold">NexusDesk {isNativeApp ? 'Desktop Pro (.EXE)' : 'Web P2P'}</span>
+                <span className="font-semibold">NexusDesk {isNativeApp ? 'Desktop Pro' : 'Web P2P'}</span>
               </div>
               <div className="flex items-center space-x-3 text-xs">
                 <span className="flex items-center text-gray-300">
@@ -496,6 +430,15 @@
             )}
           </div>
         );
+      }
+
+      class ErrorBoundary extends React.Component {
+        constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+        static getDerivedStateFromError(error) { return { hasError: true, error }; }
+        render() {
+          if (this.state.hasError) return (<div style={{padding: '40px', color: '#ff6b6b', backgroundColor: '#1e1e1e', height: '100vh', fontFamily: 'monospace'}}><h2>Errore</h2><pre>{this.state.error.toString()}</pre><button onClick={() => window.location.reload()}>Riavvia</button></div>);
+          return this.props.children;
+        }
       }
 
       const root = ReactDOM.createRoot(document.getElementById('root'));
