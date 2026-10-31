@@ -32,21 +32,31 @@
         const [dataChannel, setDataChannel] = useState(null);
         const videoRef = useRef(null);
         const [copied, setCopied] = useState(false);
+        const [linkCopied, setLinkCopied] = useState(false);
         const [remoteCursor, setRemoteCursor] = useState(null);
 
-        // Icone Vettoriali Native (Zero crash da librerie esterne)
+        // Icone Vettoriali Native
         const Icons = {
           Monitor: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>,
           Copy: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>,
           Check: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 6 9 17 4 12"/></svg>,
           Play: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="5 3 19 12 5 21 5 3"/></svg>,
           X: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
-          MousePointer2: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m14 14 3.12 3.12a.9.9 0 0 1-.64 1.53l-3.3.43-1.92 2.86A.9.9 0 0 1 10 21.4V2L22 13.5a.9.9 0 0 1-.5 1.62l-3.6.43-3.4 3.4z"/></svg>
+          MousePointer2: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m14 14 3.12 3.12a.9.9 0 0 1-.64 1.53l-3.3.43-1.92 2.86A.9.9 0 0 1 10 21.4V2L22 13.5a.9.9 0 0 1-.5 1.62l-3.6.43-3.4 3.4z"/></svg>,
+          LinkIcon: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
         };
-        const { Monitor, Copy, Check, Play, X, MousePointer2 } = Icons;
+        const { Monitor, Copy, Check, Play, X, MousePointer2, LinkIcon } = Icons;
 
-        // Inizializzazione PeerJS
+        // Inizializzazione PeerJS e lettura link d'invito
         useEffect(() => {
+          // 1. Controlla se c'è un invito nell'URL (es. ?id=123456789)
+          const urlParams = new URLSearchParams(window.location.search);
+          const inviteId = urlParams.get('id');
+          if (inviteId) {
+            setRemoteId(inviteId);
+          }
+
+          // 2. Genera o recupera il tuo ID
           const storedId = localStorage.getItem('nexus_id') || Math.floor(100000000 + Math.random() * 900000000).toString();
           localStorage.setItem('nexus_id', storedId);
           setMyId(storedId);
@@ -70,7 +80,6 @@
             }
           });
 
-          // L'ospite riceve la richiesta dati
           peer.on('connection', (conn) => {
             conn.on('data', (data) => {
               if (data.type === 'request-control') setIncomingRequest({ callerId: data.from, connection: conn });
@@ -81,11 +90,9 @@
             });
           });
 
-          // L'host riceve il flusso video
           peer.on('call', (call) => {
             call.answer(); 
             call.on('stream', (stream) => {
-              console.log("Stream video ricevuto!");
               setRemoteStream(stream);
               setSessionState('connected');
             });
@@ -95,12 +102,10 @@
           return () => peer.destroy();
         }, []);
 
-        // Avvio riproduzione video senza schermo nero
         useEffect(() => {
           if (videoRef.current && remoteStream) {
             videoRef.current.srcObject = remoteStream;
             videoRef.current.play().catch(e => {
-                console.warn("Autoplay bloccato, forzatura in corso:", e);
                 videoRef.current.muted = true;
                 videoRef.current.play();
             });
@@ -108,6 +113,15 @@
         }, [remoteStream, sessionState]);
 
         const copyId = () => { navigator.clipboard.writeText(myId); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+        
+        const copyInviteLink = () => {
+          // Crea l'URL pulito per l'invito
+          const baseUrl = window.location.href.split('?')[0];
+          const inviteUrl = `${baseUrl}?id=${myId}`;
+          navigator.clipboard.writeText(inviteUrl);
+          setLinkCopied(true);
+          setTimeout(() => setLinkCopied(false), 2000);
+        };
 
         const startConnection = () => {
           if (!remoteId || remoteId === myId || !peerInstance) return;
@@ -135,7 +149,6 @@
             setIncomingRequest(null);
             stream.getVideoTracks()[0].onended = () => { call.close(); endSession(); };
           } catch (err) {
-            console.error("Cattura annullata:", err);
             if (incomingRequest && incomingRequest.connection) incomingRequest.connection.send({ type: 'rejected' });
             setIncomingRequest(null);
           }
@@ -151,9 +164,10 @@
           setRemoteStream(null);
           setSessionState('idle');
           setDataChannel(null);
+          // Pulisce l'URL dall'ID se era un invito
+          window.history.replaceState({}, document.title, window.location.pathname);
         };
 
-        // SCHERMATA: CONTROLLO REMOTO (HOST)
         if (sessionState === 'connected' || sessionState === 'connecting') {
           return (
             <div className="flex flex-col h-screen bg-[#111111] text-white font-sans no-select">
@@ -178,7 +192,6 @@
                       <div className="w-px bg-gray-600 h-4 my-auto"></div>
                       <button onClick={endSession} className="flex items-center text-xs text-red-400 hover:text-red-300">Disconnetti</button>
                     </div>
-                    {/* VIDEO con muted forzato per evitare il blocco del browser */}
                     <video ref={videoRef} autoPlay playsInline muted onClick={handleVideoClick} className="max-w-full max-h-full object-contain cursor-crosshair" />
                   </>
                 )}
@@ -187,7 +200,6 @@
           );
         }
 
-        // SCHERMATA: CONDIVISIONE (OSPITE)
         if (sessionState === 'sharing') {
           return (
             <div className="flex flex-col h-screen bg-[#111111] text-white items-center justify-center no-select">
@@ -203,7 +215,6 @@
           );
         }
 
-        // SCHERMATA: HOME (SPLIT PANE)
         return (
           <div className="flex flex-col h-screen bg-[#1e1e1e] text-white font-sans overflow-hidden no-select">
             <div className="bg-[#181818] border-b border-black flex items-center px-2 py-1">
@@ -217,9 +228,17 @@
                     <label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-2 block">Il tuo ID</label>
                     <div className="flex items-center justify-between bg-black p-4 rounded text-3xl font-mono tracking-widest text-blue-400">
                       <span>{myId ? `${myId.slice(0,3)} ${myId.slice(3,6)} ${myId.slice(6,9)}` : '...'}</span>
-                      <button onClick={copyId} className="text-gray-500 hover:text-white p-2">{copied ? <Check size={24} className="text-green-500" /> : <Copy size={24} />}</button>
+                      <button onClick={copyId} className="text-gray-500 hover:text-white p-2 transition-colors">{copied ? <Check size={24} className="text-green-500" /> : <Copy size={24} />}</button>
                     </div>
                   </div>
+                  
+                  <div className="mb-6">
+                    <button onClick={copyInviteLink} className="flex items-center text-sm font-semibold text-blue-400 hover:text-blue-300 transition-colors">
+                      {linkCopied ? <Check size={16} className="mr-2 text-green-500" /> : <LinkIcon size={16} className="mr-2" />}
+                      {linkCopied ? 'Link copiato negli appunti!' : 'Copia Link di Invito da inviare'}
+                    </button>
+                  </div>
+
                   <div><label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-2 block">Password</label><div className="text-gray-300 text-lg font-mono tracking-widest">********</div></div>
                 </div>
               </div>
@@ -234,7 +253,6 @@
                 </div>
               </div>
             </div>
-            {/* POPUP RICHIESTA CONNESSIONE */}
             {incomingRequest && (
               <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
                 <div className="bg-[#252525] p-6 rounded-lg border border-gray-700 max-w-sm w-full shadow-2xl">
@@ -252,7 +270,6 @@
         );
       }
 
-      // Sistema anti-crash
       class ErrorBoundary extends React.Component {
         constructor(props) { super(props); this.state = { hasError: false, error: null }; }
         static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -273,7 +290,6 @@
       const root = ReactDOM.createRoot(document.getElementById('root'));
       root.render(<ErrorBoundary><App /></ErrorBoundary>);
     </script>
-
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
