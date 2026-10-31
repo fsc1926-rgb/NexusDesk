@@ -1,0 +1,31 @@
+name: Crea NexusDesk EXE
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Scarica il codice dal repository
+        uses: actions/checkout@v4
+
+      - name: Configura Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Installa Electron e dipendenze
+        run: npm install
+
+      - name: Genera NexusDesk-Portable.exe
+        run: npm run build
+
+      - name: Carica il file EXE pronto per il download
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexusDesk-Windows-Executable
+          path: dist/NexusDesk-Portable.exe
