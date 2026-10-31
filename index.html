@@ -7,7 +7,6 @@
     <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#1e1e1e">
     
-    <!-- Librerie essenziali -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -15,17 +14,17 @@
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-      body { background-color: #1e1e1e; margin: 0; padding: 0; color: white; font-family: system-ui, -apple-system, sans-serif; }
+      body { background-color: #1e1e1e; margin: 0; padding: 0; color: white; font-family: system-ui, -apple-system, sans-serif; overflow: hidden; }
       .no-select { user-select: none; -webkit-user-select: none; }
+      ::-webkit-scrollbar { width: 0px; background: transparent; }
     </style>
 </head>
 <body>
     <div id="root"></div>
     
     <script type="text/babel">
-      const { useState, useEffect, useRef } = React;
+      const { useState, useEffect, useRef, useCallback } = React;
 
-      // Icone Vettoriali Integrate (definite fuori dal componente per evitare re-render inutili)
       const Icons = {
         Monitor: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>,
         Copy: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>,
@@ -34,39 +33,44 @@
         X: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
         MousePointer2: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m14 14 3.12 3.12a.9.9 0 0 1-.64 1.53l-3.3.43-1.92 2.86A.9.9 0 0 1 10 21.4V2L22 13.5a.9.9 0 0 1-.5 1.62l-3.6.43-3.4 3.4z"/></svg>,
         LinkIcon: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>,
-        Refresh: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+        Refresh: ({size=18, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>,
+        Maximize: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>,
+        Keyboard: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="20" height="16" x="2" y="4" rx="2" ry="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>
       };
-      const { Monitor, Copy, Check, Play, X, MousePointer2, LinkIcon, Refresh } = Icons;
+      const { Monitor, Copy, Check, Play, X, MousePointer2, LinkIcon, Refresh, Maximize, Keyboard } = Icons;
       
       function App() {
         const [myId, setMyId] = useState('');
         const [peerReady, setPeerReady] = useState(false);
-        const [statusMsg, setStatusMsg] = useState('Connessione alla rete P2P...');
+        const [statusMsg, setStatusMsg] = useState('Connessione server P2P...');
         const [remoteId, setRemoteId] = useState('');
-        const [sessionState, setSessionState] = useState('idle'); // idle, connecting, connected, sharing
+        const [sessionState, setSessionState] = useState('idle'); 
         const [remoteStream, setRemoteStream] = useState(null);
         const [incomingRequest, setIncomingRequest] = useState(null);
         const [copied, setCopied] = useState(false);
         const [linkCopied, setLinkCopied] = useState(false);
-        const [remoteCursor, setRemoteCursor] = useState(null);
         const [connectedPeerId, setConnectedPeerId] = useState('');
+        
+        const [isFullscreen, setIsFullscreen] = useState(false);
+        const [controlMode, setControlMode] = useState(false);
+        
+        const [remoteCursor, setRemoteCursor] = useState(null);
+        const [remoteKeystroke, setRemoteKeystroke] = useState(null);
 
-        // Refs stabili (evitano bug di stato obsoleto dentro gli eventi WebRTC)
         const peerRef = useRef(null);
         const dataConnRef = useRef(null);
         const mediaCallRef = useRef(null);
         const localStreamRef = useRef(null);
         const videoRef = useRef(null);
+        const fullscreenContainerRef = useRef(null);
         const connectTimeoutRef = useRef(null);
 
         const generateNewId = () => Math.floor(100000000 + Math.random() * 900000000).toString();
 
         const initPeer = (forcedId = null) => {
-          if (peerRef.current) {
-            try { peerRef.current.destroy(); } catch (e) {}
-          }
+          if (peerRef.current) { try { peerRef.current.destroy(); } catch (e) {} }
           setPeerReady(false);
-          setStatusMsg('Allineamento server P2P...');
+          setStatusMsg('Allineamento...');
 
           const storedId = forcedId || localStorage.getItem('nexus_id') || generateNewId();
           localStorage.setItem('nexus_id', storedId);
@@ -76,7 +80,6 @@
             config: {
               iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:global.stun.twilio.com:3478' }
               ]
             }
@@ -90,86 +93,55 @@
             setStatusMsg('Pronto e Online');
           });
 
-          // Riconnessione automatica se il server di signaling cade in standby
           peer.on('disconnected', () => {
             setPeerReady(false);
-            setStatusMsg('Riconnessione in corso...');
+            setStatusMsg('Riconnessione...');
             try { peer.reconnect(); } catch (e) {}
           });
 
           peer.on('error', (err) => {
-            console.error("PeerJS Error:", err);
             if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
-
-            if (err.type === 'unavailable-id') {
-              // Se l'ID è rimasto bloccato da un refresh precedente, ne genera uno nuovo subito
-              const newId = generateNewId();
-              initPeer(newId);
-              return;
-            }
+            if (err.type === 'unavailable-id') { initPeer(generateNewId()); return; }
             if (err.type === 'peer-unavailable') {
-              alert("Il dispositivo remoto (" + remoteId + ") non è online o l'ID è errato.");
+              alert("Il dispositivo remoto non è online.");
               setSessionState('idle');
-            } else if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error') {
-              setStatusMsg('Rete instabile, riconnessione...');
-              setTimeout(() => {
-                if (peerRef.current && peerRef.current.disconnected) {
-                  try { peerRef.current.reconnect(); } catch (e) {}
-                }
-              }, 2000);
             }
           });
 
-          // Ricezione Canale Dati
-          peer.on('connection', (conn) => {
-            setupDataConnection(conn);
-          });
+          peer.on('connection', (conn) => { setupDataConnection(conn); });
 
-          // Ricezione Flusso Video (Quando l'Ospite chiama l'Host con lo schermo)
           peer.on('call', (call) => {
             if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
             mediaCallRef.current = call;
             setConnectedPeerId(call.peer);
-
             call.answer();
 
             call.on('stream', (stream) => {
-              if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
               setRemoteStream(stream);
               setSessionState('connected');
             });
-
-            // Fallback diretto su ontrack per compatibilità con tutte le versioni di Chrome/Edge
-            if (call.peerConnection) {
-              call.peerConnection.ontrack = (event) => {
-                if (event.streams && event.streams[0]) {
-                  if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
-                  setRemoteStream(event.streams[0]);
-                  setSessionState('connected');
-                }
-              };
-            }
-
             call.on('close', () => endSession());
-            call.on('error', () => endSession());
           });
         };
 
         const setupDataConnection = (conn) => {
           dataConnRef.current = conn;
-
           conn.on('data', (data) => {
-            if (!data || typeof data !== 'object') return;
-
+            if (!data) return;
             if (data.type === 'request-control') {
               setIncomingRequest({ callerId: data.from, connection: conn });
             } else if (data.type === 'rejected') {
               if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
-              alert("Connessione non avviata.\nMotivo: " + (data.reason || "Rifiutata dall'utente."));
+              alert("Connessione annullata. Motivo: " + (data.reason || "Rifiutato."));
               endSession();
-            } else if (data.type === 'remote-click') {
-              setRemoteCursor({ x: data.x, y: data.y });
-              setTimeout(() => setRemoteCursor(null), 1000);
+            } else if (data.type === 'remote-input') {
+              if (data.action === 'click') {
+                setRemoteCursor({ x: data.x, y: data.y });
+                setTimeout(() => setRemoteCursor(null), 1000);
+              } else if (data.action === 'keydown') {
+                setRemoteKeystroke(data.key);
+                setTimeout(() => setRemoteKeystroke(null), 2000);
+              }
             } else if (data.type === 'end-session') {
               endSession();
             }
@@ -179,226 +151,214 @@
         useEffect(() => {
           const urlParams = new URLSearchParams(window.location.search);
           const inviteId = urlParams.get('id');
-          if (inviteId) {
-            setRemoteId(inviteId.replace(/\D/g, ''));
-          }
-
+          if (inviteId) setRemoteId(inviteId.replace(/\D/g, ''));
           initPeer();
-
-          return () => {
-            if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
-            if (peerRef.current) peerRef.current.destroy();
-          };
+          
+          const handleFullscreenChange = () => { setIsFullscreen(!!document.fullscreenElement); };
+          document.addEventListener('fullscreenchange', handleFullscreenChange);
+          return () => { document.removeEventListener('fullscreenchange', handleFullscreenChange); if (peerRef.current) peerRef.current.destroy(); };
         }, []);
 
-        // Aggancia lo stream video al tag <video> non appena disponibile
         useEffect(() => {
           if (videoRef.current && remoteStream) {
             videoRef.current.srcObject = remoteStream;
-            const playPromise = videoRef.current.play();
-            if (playPromise !== undefined) {
-              playPromise.catch(() => {
-                if (videoRef.current) {
-                  videoRef.current.muted = true;
-                  videoRef.current.play().catch(e => console.error("Errore video:", e));
-                }
-              });
-            }
+            videoRef.current.play().catch(() => {
+              if (videoRef.current) { videoRef.current.muted = true; videoRef.current.play(); }
+            });
           }
         }, [remoteStream, sessionState]);
 
-        const copyId = () => {
-          navigator.clipboard.writeText(myId);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        };
-
+        const copyId = () => { navigator.clipboard.writeText(myId); setCopied(true); setTimeout(() => setCopied(false), 2000); };
         const copyInviteLink = () => {
           const baseUrl = window.location.href.split('?')[0];
-          const inviteUrl = `${baseUrl}?id=${myId}`;
-          navigator.clipboard.writeText(inviteUrl);
-          setLinkCopied(true);
-          setTimeout(() => setLinkCopied(false), 2000);
+          navigator.clipboard.writeText(`${baseUrl}?id=${myId}`);
+          setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000);
         };
 
-        // AZIONE HOST: Richiedi di vedere e controllare lo schermo del partner
         const startConnection = () => {
           const cleanRemoteId = remoteId.replace(/\D/g, '');
-          if (!cleanRemoteId || cleanRemoteId === myId || !peerRef.current) return;
-
-          // Se il server era in standby, forza la riconnessione prima di chiamare
-          if (peerRef.current.disconnected) {
-            peerRef.current.reconnect();
-          }
-
+          if (!cleanRemoteId || !peerRef.current) return;
+          if (peerRef.current.disconnected) peerRef.current.reconnect();
+          
           setConnectedPeerId(cleanRemoteId);
           setSessionState('connecting');
 
           const conn = peerRef.current.connect(cleanRemoteId, { reliable: true });
           setupDataConnection(conn);
 
-          // Timeout di sicurezza di 35 secondi per non lasciare mai la rotellina bloccata all'infinito
           if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
           connectTimeoutRef.current = setTimeout(() => {
-            setSessionState((current) => {
-              if (current === 'connecting') {
-                alert("Tempo scaduto: l'ospite non ha risposto o non è raggiungibile.");
-                return 'idle';
-              }
-              return current;
-            });
+            setSessionState(curr => curr === 'connecting' ? 'idle' : curr);
           }, 35000);
 
-          conn.on('open', () => {
-            conn.send({ type: 'request-control', from: myId });
-          });
-
-          conn.on('error', (err) => {
-            console.error("DataConn Error:", err);
-            if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
-            alert("Errore durante il collegamento al dispositivo remoto.");
-            endSession();
-          });
+          conn.on('open', () => { conn.send({ type: 'request-control', from: myId }); });
         };
 
-        // AZIONE OSPITE: Accetta la richiesta e avvia la condivisione schermo
         const acceptRequest = async () => {
-          const currentRequest = incomingRequest;
-          if (!currentRequest || !peerRef.current) return;
-
+          const req = incomingRequest;
+          if (!req || !peerRef.current) return;
           try {
-            const stream = await navigator.mediaDevices.getDisplayMedia({
-              video: { cursor: "always" },
-              audio: false
-            });
-
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: "always", displaySurface: "monitor" }, audio: false });
             localStreamRef.current = stream;
-            setConnectedPeerId(currentRequest.callerId);
-            dataConnRef.current = currentRequest.connection;
-
-            const call = peerRef.current.call(currentRequest.callerId, stream);
+            setConnectedPeerId(req.callerId);
+            dataConnRef.current = req.connection;
+            const call = peerRef.current.call(req.callerId, stream);
             mediaCallRef.current = call;
-
             setSessionState('sharing');
             setIncomingRequest(null);
-
-            stream.getVideoTracks()[0].onended = () => {
-              endSession();
-            };
+            stream.getVideoTracks()[0].onended = () => endSession();
           } catch (err) {
-            console.error("Cattura schermo annullata o bloccata:", err);
-            alert("Condivisione schermo non avviata.\nAssicurati di selezionare lo schermo intero o una finestra e premere 'Condividi'.");
-            if (currentRequest.connection && currentRequest.connection.open) {
-              currentRequest.connection.send({ type: 'rejected', reason: "L'ospite ha annullato la selezione dello schermo." });
-            }
+            alert("Condivisione schermo annullata.");
+            if (req.connection && req.connection.open) req.connection.send({ type: 'rejected', reason: "L'ospite ha annullato." });
             setIncomingRequest(null);
           }
         };
 
-        // AZIONE RAPIDA INVITO: Invia direttamente il tuo schermo all'ID che ti ha invitato
         const shareMyScreenDirectly = async () => {
-          const cleanRemoteId = remoteId.replace(/\D/g, '');
-          if (!cleanRemoteId || cleanRemoteId === myId || !peerRef.current) return;
-
+          const cleanId = remoteId.replace(/\D/g, '');
+          if (!cleanId || !peerRef.current) return;
           try {
-            const stream = await navigator.mediaDevices.getDisplayMedia({
-              video: { cursor: "always" },
-              audio: false
-            });
-
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: "always" }, audio: false });
             localStreamRef.current = stream;
-            setConnectedPeerId(cleanRemoteId);
-
-            const conn = peerRef.current.connect(cleanRemoteId, { reliable: true });
+            setConnectedPeerId(cleanId);
+            const conn = peerRef.current.connect(cleanId, { reliable: true });
             setupDataConnection(conn);
-
-            const call = peerRef.current.call(cleanRemoteId, stream);
+            const call = peerRef.current.call(cleanId, stream);
             mediaCallRef.current = call;
-
             setSessionState('sharing');
-
-            stream.getVideoTracks()[0].onended = () => {
-              endSession();
-            };
-          } catch (err) {
-            console.error("Condivisione diretta annullata:", err);
-          }
+            stream.getVideoTracks()[0].onended = () => endSession();
+          } catch (e) {}
         };
 
         const rejectRequest = () => {
-          if (incomingRequest && incomingRequest.connection && incomingRequest.connection.open) {
-            incomingRequest.connection.send({ type: 'rejected', reason: "L'utente ha premuto Rifiuta." });
-          }
+          if (incomingRequest?.connection?.open) incomingRequest.connection.send({ type: 'rejected', reason: "Rifiutato." });
           setIncomingRequest(null);
         };
 
-        const handleVideoClick = (e) => {
-          if (!dataConnRef.current || !dataConnRef.current.open || sessionState !== 'connected') return;
-          const rect = videoRef.current.getBoundingClientRect();
-          const x = (e.clientX - rect.left) / rect.width;
-          const y = (e.clientY - rect.top) / rect.height;
-          dataConnRef.current.send({ type: 'remote-click', x, y });
-        };
-
         const endSession = () => {
-          if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
-
-          if (dataConnRef.current && dataConnRef.current.open) {
-            try { dataConnRef.current.send({ type: 'end-session' }); } catch (e) {}
-          }
-          if (mediaCallRef.current) {
-            try { mediaCallRef.current.close(); } catch (e) {}
-            mediaCallRef.current = null;
-          }
-          if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(track => track.stop());
-            localStreamRef.current = null;
-          }
-          if (remoteStream) {
-            remoteStream.getTracks().forEach(track => track.stop());
-            setRemoteStream(null);
-          }
-
+          if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+          if (dataConnRef.current?.open) { try { dataConnRef.current.send({ type: 'end-session' }); } catch(e){} }
+          if (mediaCallRef.current) mediaCallRef.current.close();
+          if (localStreamRef.current) localStreamRef.current.getTracks().forEach(t => t.stop());
+          if (remoteStream) remoteStream.getTracks().forEach(t => t.stop());
+          
+          setIsFullscreen(false);
+          setControlMode(false);
           setSessionState('idle');
           setIncomingRequest(null);
         };
 
-        const cleanInputId = remoteId.replace(/\D/g, '');
-        const canConnect = peerReady && cleanInputId.length >= 6 && cleanInputId !== myId;
+        const toggleFullscreen = () => {
+          if (!fullscreenContainerRef.current) return;
+          if (!document.fullscreenElement) {
+            fullscreenContainerRef.current.requestFullscreen().catch(err => console.error(err));
+          } else {
+            document.exitFullscreen();
+          }
+        };
 
-        // SCHERMATA: CONTROLLO REMOTO (HOST)
+        // --- CALCOLO ULTRA-PRECISO DEL PUNTATORE ---
+        const getPreciseCoordinates = (e) => {
+          const video = videoRef.current;
+          if (!video) return null;
+
+          const rect = video.getBoundingClientRect();
+          const vw = video.videoWidth;
+          const vh = video.videoHeight;
+          if (!vw || !vh) return null; // Evita calcoli se il video non ha metadata
+
+          const cw = rect.width;
+          const ch = rect.height;
+
+          // Calcola le dimensioni reali del video a schermo ignorando le bande nere (object-fit: contain)
+          const scale = Math.min(cw / vw, ch / vh);
+          const displayW = vw * scale;
+          const displayH = vh * scale;
+
+          const offsetX = (cw - displayW) / 2;
+          const offsetY = (ch - displayH) / 2;
+
+          const clickX = e.clientX - rect.left;
+          const clickY = e.clientY - rect.top;
+
+          // Se il click avviene sulle bande nere, viene ignorato
+          if (clickX < offsetX || clickX > offsetX + displayW || clickY < offsetY || clickY > offsetY + displayH) {
+            return null;
+          }
+
+          // Calcolo millimetrico percentuale rispetto all'effettivo fotogramma video
+          const x = (clickX - offsetX) / displayW;
+          const y = (clickY - offsetY) / displayH;
+
+          return { x, y };
+        };
+
+        const sendInput = useCallback((action, e) => {
+          if (!controlMode || !dataConnRef.current || !dataConnRef.current.open || sessionState !== 'connected') return;
+          
+          if (action === 'keydown') {
+             dataConnRef.current.send({ type: 'remote-input', action: 'keydown', key: e.key });
+             return;
+          }
+
+          if (action === 'click') {
+            const coords = getPreciseCoordinates(e);
+            if (coords) {
+              dataConnRef.current.send({ type: 'remote-input', action: 'click', x: coords.x, y: coords.y });
+            }
+          }
+        }, [controlMode, sessionState]);
+
+        const canConnect = peerReady && remoteId.replace(/\D/g, '').length >= 6 && remoteId.replace(/\D/g, '') !== myId;
+
+        // --- HOST (VISUALE REMOTA) ---
         if (sessionState === 'connected' || sessionState === 'connecting') {
           return (
-            <div className="flex flex-col h-screen bg-[#111111] text-white font-sans no-select">
-              <div className="bg-[#1e1e1e] border-b border-gray-800 flex items-center px-4 py-2">
-                <div className="flex items-center space-x-2 bg-[#2d2d2d] px-4 py-2 rounded-t-lg border-t-2 border-blue-500">
-                  <Monitor size={16} className="text-blue-400" />
-                  <span className="font-semibold text-sm">Sessione: {connectedPeerId || remoteId}</span>
-                  <button onClick={endSession} className="ml-4 hover:bg-red-500 rounded-full p-1 transition-colors"><X size={14} /></button>
+            <div className="flex flex-col h-screen bg-[#111111] text-white font-sans no-select" tabIndex="0" onKeyDown={(e) => sendInput('keydown', e)}>
+              {!isFullscreen && (
+                <div className="bg-[#1e1e1e] border-b border-gray-800 flex items-center px-4 py-2">
+                  <div className="flex items-center space-x-2 bg-[#2d2d2d] px-4 py-2 rounded-t-lg border-t-2 border-blue-500">
+                    <Monitor size={16} className="text-blue-400" />
+                    <span className="font-semibold text-sm">Sessione: {connectedPeerId}</span>
+                    <button onClick={endSession} className="ml-4 hover:bg-red-500 rounded-full p-1 transition-colors"><X size={14} /></button>
+                  </div>
                 </div>
-              </div>
-              <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden">
+              )}
+
+              <div ref={fullscreenContainerRef} className="flex-1 relative flex items-center justify-center bg-black overflow-hidden group">
                 {sessionState === 'connecting' ? (
-                  <div className="flex flex-col items-center text-center px-4">
-                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-                    <p className="text-gray-200 font-semibold text-lg mb-1">Richiesta inviata a {connectedPeerId || remoteId}</p>
-                    <p className="text-gray-400 text-sm max-w-md">L'ospite deve cliccare su <strong>"Accetta"</strong>, selezionare la miniatura dello schermo nel popup del browser e premere <strong>"Condividi"</strong>.</p>
-                    <button onClick={endSession} className="mt-6 px-5 py-2 bg-gray-800 hover:bg-gray-700 rounded text-sm font-semibold">Annulla</button>
+                  <div className="flex flex-col items-center text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-blue-500 mb-4"></div>
+                    <p className="text-gray-300">In attesa dell'ospite...</p>
+                    <button onClick={endSession} className="mt-4 px-4 py-2 bg-gray-800 rounded">Annulla</button>
                   </div>
                 ) : (
                   <>
-                    <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-[#2d2d2d]/90 rounded-lg shadow-xl px-4 py-2 flex space-x-4 border border-gray-700 z-10 opacity-80 hover:opacity-100 transition-opacity">
-                      <div className="flex items-center text-xs text-gray-300"><MousePointer2 size={16} className="mr-2 text-blue-400" /> Clicca sullo schermo per inviare il puntatore</div>
-                      <div className="w-px bg-gray-600 h-4 my-auto"></div>
-                      <button onClick={endSession} className="flex items-center text-xs text-red-400 hover:text-red-300 font-semibold">Disconnetti</button>
+                    <div className={`absolute top-0 left-1/2 transform -translate-x-1/2 bg-[#252525] rounded-b-lg shadow-2xl px-6 py-3 flex space-x-6 border border-t-0 border-gray-700 z-20 transition-transform duration-300 ${isFullscreen ? '-translate-y-full group-hover:translate-y-0' : 'translate-y-0'}`}>
+                      <button onClick={() => setControlMode(!controlMode)} className={`flex items-center flex-col gap-1 text-xs font-semibold ${controlMode ? 'text-blue-400' : 'text-gray-400 hover:text-white'}`}>
+                        <div className={`p-2 rounded-full ${controlMode ? 'bg-blue-500/20' : 'bg-transparent'}`}><MousePointer2 size={20} /></div>
+                        {controlMode ? 'Puntatore On' : 'Puntatore Off'}
+                      </button>
+                      <div className="w-px bg-gray-700"></div>
+                      <button onClick={toggleFullscreen} className="flex items-center flex-col gap-1 text-xs font-semibold text-gray-400 hover:text-white">
+                        <div className="p-2"><Maximize size={20} /></div>
+                        {isFullscreen ? 'Riduci' : 'Intero (Doppio Clic)'}
+                      </button>
+                      <div className="w-px bg-gray-700"></div>
+                      <button onClick={endSession} className="flex items-center flex-col gap-1 text-xs font-semibold text-red-500 hover:text-red-400">
+                        <div className="p-2"><X size={20} /></div>
+                        Chiudi
+                      </button>
                     </div>
+
                     <video
                       ref={videoRef}
                       autoPlay
                       playsInline
                       muted
-                      onClick={handleVideoClick}
-                      className="w-full h-full object-contain cursor-crosshair"
+                      onClick={(e) => sendInput('click', e)}
+                      onDoubleClick={toggleFullscreen}
+                      className={`w-full h-full object-contain ${controlMode ? 'cursor-crosshair' : 'cursor-default'}`}
                     />
                   </>
                 )}
@@ -407,136 +367,102 @@
           );
         }
 
-        // SCHERMATA: CONDIVISIONE ATTIVA (OSPITE)
+        // --- OSPITE (SCHERMO CONDIVISO) ---
         if (sessionState === 'sharing') {
           return (
             <div className="flex flex-col h-screen bg-[#111111] text-white items-center justify-center no-select px-4 text-center">
               <Monitor size={64} className="text-green-500 mb-6 animate-pulse" />
               <h2 className="text-2xl font-bold mb-2">Condivisione Schermo Attiva</h2>
-              <p className="text-gray-400 mb-8">Il dispositivo <strong className="text-white font-mono">{connectedPeerId}</strong> sta visualizzando il tuo schermo.</p>
-              <button onClick={endSession} className="px-6 py-3 bg-red-600 hover:bg-red-700 font-bold rounded-lg flex items-center shadow-lg transition-colors">
+              <p className="text-gray-400 mb-8">Il dispositivo <strong className="text-white">{connectedPeerId}</strong> sta vedendo il tuo schermo.</p>
+              
+              <div className="bg-[#1e1e1e] p-4 rounded-lg border border-gray-700 text-sm text-gray-400 mb-8 max-w-md">
+                 <strong>Nota di Sicurezza Web:</strong> L'host ti mostrerà dove cliccare con un mirino visivo e ti suggerirà i tasti, ma non ha il controllo fisico hardware sul tuo dispositivo.
+              </div>
+
+              <button onClick={endSession} className="px-6 py-3 bg-red-600 hover:bg-red-500 font-bold rounded-lg flex items-center transition-colors">
                 <X size={18} className="mr-2" /> Termina Condivisione
               </button>
               
               {remoteCursor && (
                 <div
-                  className="fixed w-8 h-8 rounded-full border-4 border-red-500 bg-red-500/30 shadow-[0_0_15px_red] pointer-events-none z-50 animate-ping"
+                  className="fixed pointer-events-none z-50 w-10 h-10 border-4 border-red-500 bg-red-500/40 rounded-full shadow-[0_0_20px_red] animate-ping"
                   style={{ left: `${remoteCursor.x * 100}vw`, top: `${remoteCursor.y * 100}vh`, transform: 'translate(-50%, -50%)' }}
                 />
+              )}
+              
+              {remoteKeystroke && (
+                <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-6 py-3 rounded-lg text-2xl font-mono shadow-2xl border border-gray-700 flex items-center z-50 animate-bounce">
+                    <Keyboard size={24} className="mr-3 text-blue-400" /> Tasto: <strong className="ml-2 text-yellow-400 uppercase">{remoteKeystroke}</strong>
+                </div>
               )}
             </div>
           );
         }
 
-        // SCHERMATA: HOME (SPLIT PANE STILE ANYDESK / RUSTDESK)
+        // --- HOME ---
         return (
           <div className="flex flex-col h-screen bg-[#1e1e1e] text-white font-sans overflow-hidden no-select">
-            {/* Barra Superiore con Stato Rete */}
             <div className="bg-[#181818] border-b border-black flex items-center justify-between px-3 py-1.5">
               <div className="flex items-center space-x-2 bg-[#2d2d2d] px-4 py-1.5 rounded-t-md border-t-2 border-blue-500 text-sm">
                 <Monitor size={16} className="text-blue-400" />
-                <span className="font-semibold">Nuova Connessione</span>
+                <span className="font-semibold">NexusDesk Web P2P</span>
               </div>
               <div className="flex items-center space-x-3 text-xs">
                 <span className="flex items-center text-gray-300">
                   <span className={`w-2.5 h-2.5 rounded-full mr-2 ${peerReady ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-yellow-500 animate-pulse'}`}></span>
                   {statusMsg}
                 </span>
-                <button onClick={() => initPeer()} className="text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800" title="Riconnetti alla rete P2P">
-                  <Refresh size={15} />
-                </button>
               </div>
             </div>
             
             <div className="flex flex-col md:flex-row flex-1 overflow-y-auto">
-              {/* Pannello Sinistro: Questo Dispositivo */}
-              <div className="w-full md:w-1/2 p-8 md:p-10 bg-[#252525] flex flex-col shadow-2xl z-10 border-b md:border-b-0 md:border-r border-[#111]">
+              <div className="w-full md:w-1/2 p-8 md:p-10 bg-[#252525] flex flex-col shadow-2xl border-r border-[#111]">
                 <h2 className="text-xl font-bold text-gray-200 mb-6">Questo Dispositivo</h2>
-                
                 <div className="bg-[#1e1e1e] p-6 rounded-lg border border-gray-700 shadow-inner">
                   <div className="mb-5">
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-2 block">Il tuo ID (Comunicalo al partner)</label>
-                    <div className="flex items-center justify-between bg-black p-4 rounded text-2xl md:text-3xl font-mono tracking-widest text-blue-400 border border-gray-800">
+                    <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Il tuo ID</label>
+                    <div className="flex items-center justify-between bg-black p-4 rounded text-3xl font-mono text-blue-400 border border-gray-800">
                       <span>{myId ? `${myId.slice(0,3)} ${myId.slice(3,6)} ${myId.slice(6,9)}` : '...'}</span>
-                      <button onClick={copyId} className="text-gray-400 hover:text-white p-2 transition-colors" title="Copia ID">
-                        {copied ? <Check size={24} className="text-green-500" /> : <Copy size={24} />}
-                      </button>
+                      <button onClick={copyId} className="text-gray-400 hover:text-white p-2">{copied ? <Check size={24} className="text-green-500" /> : <Copy size={24} />}</button>
                     </div>
                   </div>
-                  
                   <div className="mb-6">
-                    <button onClick={copyInviteLink} className="w-full py-2.5 px-4 bg-[#2a2a2a] hover:bg-[#333] border border-gray-600 rounded flex items-center justify-center text-sm font-semibold text-blue-400 hover:text-blue-300 transition-colors">
+                    <button onClick={copyInviteLink} className="w-full py-2.5 px-4 bg-[#2a2a2a] hover:bg-[#333] border border-gray-600 rounded flex justify-center text-sm font-semibold text-blue-400">
                       {linkCopied ? <Check size={16} className="mr-2 text-green-500" /> : <LinkIcon size={16} className="mr-2" />}
-                      {linkCopied ? 'Link di invito copiato negli appunti!' : 'Copia Link di Invito da inviare'}
+                      {linkCopied ? 'Copiato!' : 'Copia Link di Invito'}
                     </button>
                   </div>
-
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-1 block">Stato Sicurezza</label>
-                    <div className="text-gray-400 text-xs">Connessione P2P protetta da crittografia WebRTC con conferma manuale.</div>
-                  </div>
+                  <div><label className="text-xs text-gray-400 uppercase font-bold mb-1 block">Password</label><div className="text-gray-400 text-lg font-mono">********</div></div>
                 </div>
               </div>
               
-              {/* Pannello Destro: Controlla Dispositivo Remoto */}
               <div className="w-full md:w-1/2 p-8 md:p-10 bg-[#1e1e1e] flex flex-col">
                 <h2 className="text-xl font-bold text-gray-200 mb-6">Controlla Dispositivo Remoto</h2>
-                
                 <div className="bg-[#2d2d2d] p-6 rounded-lg border border-gray-700">
-                  <label className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-2 block">Inserisci ID partner (9 cifre)</label>
+                  <label className="text-xs text-gray-400 uppercase font-bold mb-2 block">Inserisci ID partner</label>
                   <div className="flex flex-col sm:flex-row gap-3">
-                    <input
-                      type="text"
-                      value={remoteId}
-                      onChange={(e) => setRemoteId(e.target.value.replace(/[^\d\s]/g, ''))}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && canConnect) startConnection(); }}
-                      placeholder="Es. 123 456 789"
-                      className="flex-1 bg-black text-white text-2xl font-mono p-4 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
-                    />
-                    <button
-                      onClick={startConnection}
-                      disabled={!canConnect}
-                      className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold px-6 py-4 rounded flex items-center justify-center shadow-lg transition-colors cursor-pointer disabled:cursor-not-allowed"
-                    >
-                      <Play size={20} className="mr-2" /> Connetti
-                    </button>
+                    <input type="text" value={remoteId} onChange={(e) => setRemoteId(e.target.value.replace(/[^\d\s]/g, ''))} placeholder="Es. 123 456 789" className="flex-1 bg-black text-white text-2xl font-mono p-4 rounded border border-gray-600 focus:outline-none" />
+                    <button onClick={startConnection} disabled={!canConnect} className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 text-white font-bold px-6 py-4 rounded flex items-center shadow-lg"><Play size={20} className="mr-2" /> Connetti</button>
                   </div>
-
-                  {cleanInputId === myId && cleanInputId !== '' && (
-                    <p className="text-xs text-yellow-400 mt-3">Hai inserito il tuo stesso ID. Inserisci l'ID dell'altro computer.</p>
-                  )}
-
-                  {/* Pulsante secondario utile se l'affiliato ha aperto il tuo Link d'Invito */}
                   {canConnect && (
-                    <div className="mt-4 pt-4 border-t border-gray-700 flex items-center justify-between">
-                      <span className="text-xs text-gray-400">Vuoi mostrare il tuo schermo a questo ID?</span>
-                      <button
-                        onClick={shareMyScreenDirectly}
-                        className="text-xs bg-green-700 hover:bg-green-600 text-white font-semibold px-3 py-2 rounded transition-colors"
-                      >
-                        Condividi il mio schermo
-                      </button>
+                    <div className="mt-4 pt-4 border-t border-gray-700 flex justify-between items-center">
+                      <span className="text-xs text-gray-400">Opzione invio schermo:</span>
+                      <button onClick={shareMyScreenDirectly} className="text-xs bg-green-700 hover:bg-green-600 text-white px-3 py-2 rounded">Condividi il mio schermo</button>
                     </div>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Popup Richiesta di Controllo in Arrivo */}
             {incomingRequest && (
               <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                <div className="bg-[#252525] p-6 rounded-lg border border-gray-700 max-w-sm w-full shadow-2xl">
-                  <div className="flex justify-center mb-4">
-                    <div className="bg-blue-500/20 p-4 rounded-full text-blue-400"><Monitor size={32} /></div>
-                  </div>
-                  <h3 className="text-xl font-bold text-center mb-2">Richiesta di Controllo</h3>
-                  <p className="text-center text-gray-300 text-sm mb-6">
-                    L'utente <strong className="text-white font-mono">{incomingRequest.callerId}</strong> chiede di visualizzare il tuo schermo.<br/>
-                    <span className="text-xs text-gray-400 block mt-2">Dopo aver cliccato su Accetta, seleziona lo schermo nel popup del browser e premi "Condividi".</span>
-                  </p>
+                <div className="bg-[#252525] p-6 rounded-lg border border-gray-700 max-w-sm w-full shadow-2xl text-center">
+                  <div className="bg-blue-500/20 p-4 rounded-full text-blue-400 inline-block mb-4"><Monitor size={32} /></div>
+                  <h3 className="text-xl font-bold mb-2">Richiesta in arrivo</h3>
+                  <p className="text-gray-300 text-sm mb-6">L'ID <strong className="text-white font-mono">{incomingRequest.callerId}</strong> vuole collegarsi.</p>
                   <div className="flex space-x-3">
-                    <button onClick={rejectRequest} className="flex-1 bg-gray-700 hover:bg-gray-600 py-3 rounded font-bold transition-colors">Rifiuta</button>
-                    <button onClick={acceptRequest} className="flex-1 bg-green-600 hover:bg-green-500 py-3 rounded font-bold flex items-center justify-center transition-colors"><Check size={18} className="mr-2" /> Accetta</button>
+                    <button onClick={rejectRequest} className="flex-1 bg-gray-700 py-3 rounded font-bold">Rifiuta</button>
+                    <button onClick={acceptRequest} className="flex-1 bg-green-600 py-3 rounded font-bold flex justify-center"><Check size={18} className="mr-2" /> Accetta</button>
                   </div>
                 </div>
               </div>
@@ -545,20 +471,11 @@
         );
       }
 
-      // Scudo Anti-Crash React
       class ErrorBoundary extends React.Component {
         constructor(props) { super(props); this.state = { hasError: false, error: null }; }
         static getDerivedStateFromError(error) { return { hasError: true, error }; }
         render() {
-          if (this.state.hasError) {
-            return (
-              <div style={{padding: '40px', color: '#ff6b6b', backgroundColor: '#1e1e1e', height: '100vh', fontFamily: 'monospace'}}>
-                <h2>Errore Interfaccia Rilevato</h2>
-                <pre style={{backgroundColor: '#000', padding: '20px', overflow: 'auto', border: '1px solid #333'}}>{this.state.error.toString()}</pre>
-                <button onClick={() => window.location.reload()} style={{marginTop: '20px', padding: '10px 20px', background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '5px'}}>Riavvia App</button>
-              </div>
-            );
-          }
+          if (this.state.hasError) return (<div style={{padding: '40px', color: '#ff6b6b', backgroundColor: '#1e1e1e', height: '100vh', fontFamily: 'monospace'}}><h2>Errore</h2><pre>{this.state.error.toString()}</pre><button onClick={() => window.location.reload()}>Riavvia</button></div>);
           return this.props.children;
         }
       }
@@ -566,13 +483,6 @@
       const root = ReactDOM.createRoot(document.getElementById('root'));
       root.render(<ErrorBoundary><App /></ErrorBoundary>);
     </script>
-    
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => { 
-          navigator.serviceWorker.register('./sw.js').catch(()=>{}); 
-        });
-      }
-    </script>
+    <script>if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(()=>{})); }</script>
 </body>
 </html>
