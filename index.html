@@ -17,8 +17,6 @@
       body { background-color: #1e1e1e; margin: 0; padding: 0; color: white; font-family: system-ui, -apple-system, sans-serif; overflow: hidden; }
       .no-select { user-select: none; -webkit-user-select: none; }
       ::-webkit-scrollbar { width: 0px; background: transparent; }
-      /* Nasconde forzatamente il cursore host se in controllo */
-      .force-hide-cursor * { cursor: none !important; }
     </style>
 </head>
 <body>
@@ -278,7 +276,8 @@
 
           if (action === 'move') {
             const now = Date.now();
-            if (now - lastMoveRef.current < 35) return;
+            // FIX: Limite più alto (45ms) per evitare l'ingorgo di rete che faceva muovere il mouse da solo
+            if (now - lastMoveRef.current < 45) return;
             lastMoveRef.current = now;
           }
 
@@ -292,7 +291,7 @@
 
         if (sessionState === 'connected' || sessionState === 'connecting') {
           return (
-            <div className={`flex flex-col h-screen bg-[#111111] text-white font-sans no-select outline-none ${controlMode ? 'force-hide-cursor' : ''}`} tabIndex="0" onKeyDown={(e) => sendInput('keydown', e)}>
+            <div className="flex flex-col h-screen bg-[#111111] text-white font-sans no-select outline-none" tabIndex="0" onKeyDown={(e) => sendInput('keydown', e)}>
               {!isFullscreen && (
                 <div className="bg-[#1e1e1e] border-b border-gray-800 flex items-center justify-between px-4 py-2">
                   <div className="flex items-center space-x-2 bg-[#2d2d2d] px-4 py-1.5 rounded-t-lg border-t-2 border-blue-500">
@@ -326,7 +325,7 @@
                     onClick={(e) => sendInput('click', e)}
                     onDoubleClick={(e) => sendInput('dblclick', e)}
                     onContextMenu={(e) => { e.preventDefault(); sendInput('rightclick', e); }}
-                    className="w-full h-full object-contain"
+                    className={`w-full h-full object-contain ${controlMode ? 'cursor-crosshair' : 'cursor-default'}`}
                   />
                 )}
               </div>
@@ -442,7 +441,8 @@
       }
 
       const root = ReactDOM.createRoot(document.getElementById('root'));
-      root.render(<App />);
+      root.render(<ErrorBoundary><App /></ErrorBoundary>);
     </script>
+    <script>if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(()=>{})); }</script>
 </body>
 </html>
