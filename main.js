@@ -5,17 +5,11 @@ const { spawn } = require('child_process');
 let mainWindow;
 let psController = null;
 
-// Avvia il bridge nativo con le API User32.dll di Windows per controllare Mouse e Tastiera reali
 function startHardwareController() {
   if (process.platform !== 'win32') return;
 
   psController = spawn('powershell.exe', [
-    '-NoProfile',
-    '-NoLogo',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-Command',
-    '-'
+    '-NoProfile', '-NoLogo', '-ExecutionPolicy', 'Bypass', '-Command', '-'
   ], { stdio: ['pipe', 'ignore', 'ignore'], windowsHide: true });
 
   const initCSharp = `
@@ -61,25 +55,14 @@ function sendHardwareCommand(cmd) {
 
 function mapKeyToSendKeys(key) {
   const specialMap = {
-    'Enter': '{ENTER}',
-    'Backspace': '{BS}',
-    'Tab': '{TAB}',
-    'Escape': '{ESC}',
-    'Delete': '{DEL}',
-    'ArrowUp': '{UP}',
-    'ArrowDown': '{DOWN}',
-    'ArrowLeft': '{LEFT}',
-    'ArrowRight': '{RIGHT}',
-    'Home': '{HOME}',
-    'End': '{END}',
-    'PageUp': '{PGUP}',
-    'PageDown': '{PGDN}',
-    ' ': ' '
+    'Enter': '{ENTER}', 'Backspace': '{BS}', 'Tab': '{TAB}', 'Escape': '{ESC}',
+    'Delete': '{DEL}', 'ArrowUp': '{UP}', 'ArrowDown': '{DOWN}', 'ArrowLeft': '{LEFT}',
+    'ArrowRight': '{RIGHT}', 'Home': '{HOME}', 'End': '{END}', 'PageUp': '{PGUP}',
+    'PageDown': '{PGDN}', ' ': ' '
   };
 
   if (specialMap[key]) return specialMap[key];
   if (key.length === 1) {
-    // Escape dei caratteri riservati di SendKeys (+ ^ % ~ ( ) { } [ ])
     if (['+', '^', '%', '~', '(', ')', '{', '}', '[', ']'].includes(key)) {
       return `{${key}}`;
     }
@@ -90,39 +73,27 @@ function mapKeyToSendKeys(key) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1150,
-    height: 740,
-    minWidth: 900,
-    minHeight: 600,
-    backgroundColor: '#1e1e1e',
-    autoHideMenuBar: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false
-    }
+    width: 1150, height: 740, minWidth: 900, minHeight: 600,
+    backgroundColor: '#1e1e1e', autoHideMenuBar: true,
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
-
   mainWindow.loadFile('index.html');
 }
 
-// Restituisce l'ID della sorgente video dell'intero schermo principale
 ipcMain.handle('get-primary-screen', async () => {
   const sources = await desktopCapturer.getSources({ types: ['screen'] });
   return sources[0] ? sources[0].id : null;
 });
 
-// Esegue fisicamente i comandi di Mouse e Tastiera sul sistema operativo dell'Ospite
 ipcMain.on('execute-native-input', (event, data) => {
   if (process.platform !== 'win32') return;
 
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.size;
-  const scaleFactor = primaryDisplay.scaleFactor || 1;
 
-  // Calcolo coordinate fisiche tenendo conto dello scaling DPI di Windows (es. 125% o 150%)
-  const targetX = Math.round(data.x * width * scaleFactor);
-  const targetY = Math.round(data.y * height * scaleFactor);
+  // FIX PRECISIONE: Calcolo diretto. Rimuove il conflitto con lo zoom del 125/150% di Windows.
+  const targetX = Math.round(data.x * width);
+  const targetY = Math.round(data.y * height);
 
   if (data.action === 'move') {
     sendHardwareCommand(`[NexusInput]::Move(${targetX}, ${targetY})`);
@@ -141,14 +112,8 @@ ipcMain.on('execute-native-input', (event, data) => {
   }
 });
 
-app.whenReady().then(() => {
-  startHardwareController();
-  createWindow();
-});
-
+app.whenReady().then(() => { startHardwareController(); createWindow(); });
 app.on('window-all-closed', () => {
-  if (psController) {
-    try { psController.kill(); } catch (e) {}
-  }
+  if (psController) { try { psController.kill(); } catch (e) {} }
   if (process.platform !== 'darwin') app.quit();
 });
