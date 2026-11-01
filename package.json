@@ -1,6 +1,6 @@
 {
   "name": "nexusdesk-native",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "NexusDesk P2P - Controllo Remoto Nativo",
   "main": "main.js",
   "scripts": {
@@ -17,7 +17,8 @@
     "appId": "com.nexusdesk.p2p",
     "productName": "NexusDesk",
     "win": {
-      "target": "portable"
+      "target": "portable",
+      "requestedExecutionLevel": "requireAdministrator"
     },
     "portable": {
       "artifactName": "NexusDesk-Portable.exe"
