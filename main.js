@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, screen, clipboard } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 
@@ -19,6 +19,8 @@ using System;
 using System.Runtime.InteropServices;
 public class NexusInput {
     [DllImport("user32.dll")]
+    public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")]
     public static extern bool SetCursorPos(int X, int Y);
     [DllImport("user32.dll")]
     public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
@@ -28,6 +30,9 @@ public class NexusInput {
     public const uint RIGHTDOWN = 0x0008;
     public const uint RIGHTUP = 0x0010;
 
+    public static void Init() {
+        SetProcessDPIAware();
+    }
     public static void Move(int x, int y) {
         SetCursorPos(x, y);
     }
@@ -43,11 +48,13 @@ public class NexusInput {
     }
 }
 "@
+[NexusInput]::Init()
 `;
   psController.stdin.write(initCSharp + '\n');
 }
 
 function sendHardwareCommand(cmd) {
+  if (!psController) startHardwareController();
   if (psController && psController.stdin.writable) {
     psController.stdin.write(cmd + '\n');
   }
@@ -62,7 +69,7 @@ function mapKeyToSendKeys(key) {
   };
 
   if (specialMap[key]) return specialMap[key];
-  if (key.length === 1) {
+  if (key && key.length === 1) {
     if (['+', '^', '%', '~', '(', ')', '{', '}', '[', ']'].includes(key)) {
       return `{${key}}`;
     }
@@ -85,23 +92,29 @@ ipcMain.handle('get-primary-screen', async () => {
   return sources[0] ? sources[0].id : null;
 });
 
+// Moduli Appunti (Clipboard) - Inviati e ricevuti da React
+ipcMain.on('write-clipboard', (event, text) => { clipboard.writeText(text); });
+ipcMain.handle('read-clipboard', () => { return clipboard.readText(); });
+
 ipcMain.on('execute-native-input', (event, data) => {
   if (process.platform !== 'win32') return;
 
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.size;
-  
-  // RIPRISTINATO: Serve per non sfalsare la mira se l'ospite usa lo zoom di Windows (125%, 150%)
   const scaleFactor = primaryDisplay.scaleFactor || 1;
-  const targetX = Math.round(data.x * width * scaleFactor);
-  const targetY = Math.round(data.y * height * scaleFactor);
+
+  const realWidth = Math.round(width * scaleFactor);
+  const realHeight = Math.round(height * scaleFactor);
+
+  const targetX = Math.max(0, Math.min(realWidth - 1, Math.round(data.x * realWidth)));
+  const targetY = Math.max(0, Math.min(realHeight - 1, Math.round(data.y * realHeight)));
 
   if (data.action === 'move') {
     sendHardwareCommand(`[NexusInput]::Move(${targetX}, ${targetY})`);
   } else if (data.action === 'click') {
     sendHardwareCommand(`[NexusInput]::LeftClick(${targetX}, ${targetY})`);
   } else if (data.action === 'dblclick') {
-    sendHardwareCommand(`[NexusInput]::LeftClick(${targetX}, ${targetY}); Start-Sleep -Milliseconds 60; [NexusInput]::LeftClick(${targetX}, ${targetY})`);
+    sendHardwareCommand(`[NexusInput]::LeftClick(${targetX}, ${targetY}); Start-Sleep -Milliseconds 50; [NexusInput]::LeftClick(${targetX}, ${targetY})`);
   } else if (data.action === 'rightclick') {
     sendHardwareCommand(`[NexusInput]::RightClick(${targetX}, ${targetY})`);
   } else if (data.action === 'keydown' && data.key) {
@@ -113,8 +126,14 @@ ipcMain.on('execute-native-input', (event, data) => {
   }
 });
 
-app.whenReady().then(() => { startHardwareController(); createWindow(); });
+app.whenReady().then(() => {
+  startHardwareController();
+  createWindow();
+});
+
 app.on('window-all-closed', () => {
-  if (psController) { try { psController.kill(); } catch (e) {} }
+  if (psController) {
+    try { psController.kill(); } catch (e) {}
+  }
   if (process.platform !== 'darwin') app.quit();
 });
