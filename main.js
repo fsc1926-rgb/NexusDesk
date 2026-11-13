@@ -9,8 +9,9 @@ function startHardwareController() {
   if (process.platform !== 'win32') return;
   if (psController) return;
 
+  // Rimossa la flag "-ExecutionPolicy Bypass" che faceva scattare gli antivirus
   psController = spawn('powershell.exe', [
-    '-NoProfile', '-NoLogo', '-ExecutionPolicy', 'Bypass', '-Command', '-'
+    '-NoProfile', '-NoLogo', '-NonInteractive', '-Command', '-'
   ], { stdio: ['pipe', 'ignore', 'ignore'], windowsHide: true });
 
   psController.on('exit', () => {
@@ -170,8 +171,8 @@ ipcMain.on('execute-native-input', (event, data) => {
   }
 });
 
+// Avvia solo la finestra all'apertura (PowerShell partirà in automatico solo quando inizia il controllo remoto)
 app.whenReady().then(() => {
-  startHardwareController();
   createWindow();
 });
 
