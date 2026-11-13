@@ -7,10 +7,19 @@ let psController = null;
 
 function startHardwareController() {
   if (process.platform !== 'win32') return;
+  if (psController) return;
 
   psController = spawn('powershell.exe', [
     '-NoProfile', '-NoLogo', '-ExecutionPolicy', 'Bypass', '-Command', '-'
   ], { stdio: ['pipe', 'ignore', 'ignore'], windowsHide: true });
+
+  psController.on('exit', () => {
+    psController = null;
+  });
+
+  psController.on('error', () => {
+    psController = null;
+  });
 
   const initCSharp = `
 Add-Type -AssemblyName System.Windows.Forms
@@ -23,12 +32,15 @@ public class NexusInput {
     [DllImport("user32.dll")]
     public static extern bool SetCursorPos(int X, int Y);
     [DllImport("user32.dll")]
-    public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
+    public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, int dwExtraInfo);
 
     public const uint LEFTDOWN = 0x0002;
     public const uint LEFTUP = 0x0004;
     public const uint RIGHTDOWN = 0x0008;
     public const uint RIGHTUP = 0x0010;
+    public const uint MIDDLEDOWN = 0x0020;
+    public const uint MIDDLEUP = 0x0040;
+    public const uint WHEEL = 0x0800;
 
     public static void Init() {
         SetProcessDPIAware();
@@ -36,15 +48,20 @@ public class NexusInput {
     public static void Move(int x, int y) {
         SetCursorPos(x, y);
     }
-    public static void LeftClick(int x, int y) {
+    public static void MouseDown(int x, int y, int button) {
         SetCursorPos(x, y);
-        mouse_event(LEFTDOWN, 0, 0, 0, 0);
-        mouse_event(LEFTUP, 0, 0, 0, 0);
+        if (button == 0) mouse_event(LEFTDOWN, 0, 0, 0, 0);
+        else if (button == 1) mouse_event(MIDDLEDOWN, 0, 0, 0, 0);
+        else if (button == 2) mouse_event(RIGHTDOWN, 0, 0, 0, 0);
     }
-    public static void RightClick(int x, int y) {
+    public static void MouseUp(int x, int y, int button) {
         SetCursorPos(x, y);
-        mouse_event(RIGHTDOWN, 0, 0, 0, 0);
-        mouse_event(RIGHTUP, 0, 0, 0, 0);
+        if (button == 0) mouse_event(LEFTUP, 0, 0, 0, 0);
+        else if (button == 1) mouse_event(MIDDLEUP, 0, 0, 0, 0);
+        else if (button == 2) mouse_event(RIGHTUP, 0, 0, 0, 0);
+    }
+    public static void Scroll(int delta) {
+        mouse_event(WHEEL, 0, 0, delta, 0);
     }
 }
 "@
@@ -55,34 +72,57 @@ public class NexusInput {
 
 function sendHardwareCommand(cmd) {
   if (!psController) startHardwareController();
-  if (psController && psController.stdin.writable) {
-    psController.stdin.write(cmd + '\n');
+  if (psController && psController.stdin && psController.stdin.writable) {
+    try {
+      psController.stdin.write(cmd + '\n');
+    } catch (e) {
+      psController = null;
+    }
   }
 }
 
-function mapKeyToSendKeys(key) {
+function mapKeyToSendKeys(data) {
+  const { key, ctrlKey, altKey, shiftKey } = data;
+  if (['Control', 'Shift', 'Alt', 'Meta'].includes(key)) return null;
+
   const specialMap = {
     'Enter': '{ENTER}', 'Backspace': '{BS}', 'Tab': '{TAB}', 'Escape': '{ESC}',
-    'Delete': '{DEL}', 'ArrowUp': '{UP}', 'ArrowDown': '{DOWN}', 'ArrowLeft': '{LEFT}',
-    'ArrowRight': '{RIGHT}', 'Home': '{HOME}', 'End': '{END}', 'PageUp': '{PGUP}',
-    'PageDown': '{PGDN}', ' ': ' '
+    'Delete': '{DEL}', 'Insert': '{INS}', 'ArrowUp': '{UP}', 'ArrowDown': '{DOWN}',
+    'ArrowLeft': '{LEFT}', 'ArrowRight': '{RIGHT}', 'Home': '{HOME}', 'End': '{END}',
+    'PageUp': '{PGUP}', 'PageDown': '{PGDN}', ' ': ' ',
+    'F1': '{F1}', 'F2': '{F2}', 'F3': '{F3}', 'F4': '{F4}', 'F5': '{F5}', 'F6': '{F6}',
+    'F7': '{F7}', 'F8': '{F8}', 'F9': '{F9}', 'F10': '{F10}', 'F11': '{F11}', 'F12': '{F12}'
   };
 
-  if (specialMap[key]) return specialMap[key];
-  if (key && key.length === 1) {
+  let baseKey = specialMap[key] || null;
+
+  if (!baseKey && key && key.length === 1) {
     if (['+', '^', '%', '~', '(', ')', '{', '}', '[', ']'].includes(key)) {
-      return `{${key}}`;
+      baseKey = `{${key}}`;
+    } else {
+      baseKey = (ctrlKey || altKey) ? key.toLowerCase() : key;
     }
-    return key;
   }
-  return null;
+
+  if (!baseKey) return null;
+
+  let prefix = '';
+  if (ctrlKey) prefix += '^';
+  if (altKey) prefix += '%';
+  if (shiftKey && (ctrlKey || altKey || specialMap[key])) prefix += '+';
+
+  return prefix + baseKey;
 }
 
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1150, height: 740, minWidth: 900, minHeight: 600,
     backgroundColor: '#1e1e1e', autoHideMenuBar: true,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
   });
   mainWindow.loadFile('index.html');
 }
@@ -92,8 +132,7 @@ ipcMain.handle('get-primary-screen', async () => {
   return sources[0] ? sources[0].id : null;
 });
 
-// Moduli Appunti (Clipboard) - Inviati e ricevuti da React
-ipcMain.on('write-clipboard', (event, text) => { clipboard.writeText(text); });
+ipcMain.on('write-clipboard', (event, text) => { clipboard.writeText(text || ''); });
 ipcMain.handle('read-clipboard', () => { return clipboard.readText(); });
 
 ipcMain.on('execute-native-input', (event, data) => {
@@ -106,19 +145,24 @@ ipcMain.on('execute-native-input', (event, data) => {
   const realWidth = Math.round(width * scaleFactor);
   const realHeight = Math.round(height * scaleFactor);
 
-  const targetX = Math.max(0, Math.min(realWidth - 1, Math.round(data.x * realWidth)));
-  const targetY = Math.max(0, Math.min(realHeight - 1, Math.round(data.y * realHeight)));
+  if (typeof data.x === 'number' && typeof data.y === 'number') {
+    const targetX = Math.max(0, Math.min(realWidth - 1, Math.round(data.x * realWidth)));
+    const targetY = Math.max(0, Math.min(realHeight - 1, Math.round(data.y * realHeight)));
 
-  if (data.action === 'move') {
-    sendHardwareCommand(`[NexusInput]::Move(${targetX}, ${targetY})`);
-  } else if (data.action === 'click') {
-    sendHardwareCommand(`[NexusInput]::LeftClick(${targetX}, ${targetY})`);
-  } else if (data.action === 'dblclick') {
-    sendHardwareCommand(`[NexusInput]::LeftClick(${targetX}, ${targetY}); Start-Sleep -Milliseconds 50; [NexusInput]::LeftClick(${targetX}, ${targetY})`);
-  } else if (data.action === 'rightclick') {
-    sendHardwareCommand(`[NexusInput]::RightClick(${targetX}, ${targetY})`);
+    if (data.action === 'move') {
+      sendHardwareCommand(`[NexusInput]::Move(${targetX}, ${targetY})`);
+    } else if (data.action === 'mousedown') {
+      sendHardwareCommand(`[NexusInput]::MouseDown(${targetX}, ${targetY}, ${data.button || 0})`);
+    } else if (data.action === 'mouseup') {
+      sendHardwareCommand(`[NexusInput]::MouseUp(${targetX}, ${targetY}, ${data.button || 0})`);
+    }
+  }
+
+  if (data.action === 'wheel' && typeof data.deltaY === 'number') {
+    const wheelDelta = data.deltaY < 0 ? 120 : -120;
+    sendHardwareCommand(`[NexusInput]::Scroll(${wheelDelta})`);
   } else if (data.action === 'keydown' && data.key) {
-    const mapped = mapKeyToSendKeys(data.key);
+    const mapped = mapKeyToSendKeys(data);
     if (mapped) {
       const safeKey = mapped.replace(/'/g, "''");
       sendHardwareCommand(`[System.Windows.Forms.SendKeys]::SendWait('${safeKey}')`);
