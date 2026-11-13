@@ -35,9 +35,11 @@
         X: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
         MousePointer2: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m14 14 3.12 3.12a.9.9 0 0 1-.64 1.53l-3.3.43-1.92 2.86A.9.9 0 0 1 10 21.4V2L22 13.5a.9.9 0 0 1-.5 1.62l-3.6.43-3.4 3.4z"/></svg>,
         LinkIcon: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>,
-        Maximize: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        Maximize: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>,
+        Volume2: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>,
+        VolumeX: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>
       };
-      const { Monitor, Copy, Check, Play, X, MousePointer2, LinkIcon, Maximize } = Icons;
+      const { Monitor, Copy, Check, Play, X, MousePointer2, LinkIcon, Maximize, Volume2, VolumeX } = Icons;
       
       function App() {
         const [myId, setMyId] = useState('');
@@ -53,6 +55,7 @@
         
         const [isFullscreen, setIsFullscreen] = useState(false);
         const [controlMode, setControlMode] = useState(true);
+        const [isMuted, setIsMuted] = useState(false);
         const [remoteCursor, setRemoteCursor] = useState(null);
 
         const peerRef = useRef(null);
@@ -60,6 +63,7 @@
         const mediaCallRef = useRef(null);
         const localStreamRef = useRef(null);
         const videoRef = useRef(null);
+        const sessionContainerRef = useRef(null);
         const fullscreenContainerRef = useRef(null);
         const connectTimeoutRef = useRef(null);
         const lastMoveRef = useRef(0);
@@ -70,15 +74,47 @@
           if (isNativeApp) {
             const sourceId = await window.nexusNative.getPrimaryScreenId();
             if (sourceId) {
-              return await navigator.mediaDevices.getUserMedia({
-                audio: false,
-                video: {
-                  mandatory: { chromeMediaSource: 'desktop', chromeMediaSourceId: sourceId, maxWidth: 1920, maxHeight: 1080, maxFrameRate: 30 }
+              const videoConstraints = {
+                mandatory: {
+                  chromeMediaSource: 'desktop',
+                  chromeMediaSourceId: sourceId,
+                  maxWidth: 1920,
+                  maxHeight: 1080,
+                  maxFrameRate: 30
                 }
-              });
+              };
+              try {
+                // Tentativo con Audio di Sistema (Loopback Windows) + Video
+                return await navigator.mediaDevices.getUserMedia({
+                  audio: {
+                    mandatory: {
+                      chromeMediaSource: 'desktop',
+                      chromeMediaSourceId: sourceId
+                    }
+                  },
+                  video: videoConstraints
+                });
+              } catch (audioErr) {
+                console.warn("Audio di sistema non disponibile, fallback a solo video:", audioErr);
+                return await navigator.mediaDevices.getUserMedia({
+                  audio: false,
+                  video: videoConstraints
+                });
+              }
             }
           }
-          return await navigator.mediaDevices.getDisplayMedia({ video: { cursor: "always", displaySurface: "monitor" }, audio: false });
+          // Versione Browser Web: richiede condivisione schermo + audio di sistema/scheda
+          try {
+            return await navigator.mediaDevices.getDisplayMedia({
+              video: { cursor: "always", displaySurface: "monitor" },
+              audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+            });
+          } catch (err) {
+            return await navigator.mediaDevices.getDisplayMedia({
+              video: { cursor: "always", displaySurface: "monitor" },
+              audio: false
+            });
+          }
         };
 
         const initPeer = (forcedId = null) => {
@@ -127,7 +163,7 @@
             } else if (data.type === 'remote-input') {
               if (isNativeApp) {
                 window.nexusNative.sendNativeInput(data);
-              } else if (data.action === 'click') {
+              } else if (data.action === 'mousedown') {
                 setRemoteCursor({ x: data.x, y: data.y });
                 setTimeout(() => setRemoteCursor(null), 1000);
               }
@@ -149,9 +185,28 @@
         useEffect(() => {
           if (videoRef.current && remoteStream) {
             videoRef.current.srcObject = remoteStream;
-            videoRef.current.play().catch(() => { if (videoRef.current) { videoRef.current.muted = true; videoRef.current.play(); } });
+            videoRef.current.muted = isMuted;
+            videoRef.current.play().catch(() => {
+              // Se l'autoplay con audio viene bloccato dal browser, parte in mute e aggiorna lo stato UI
+              if (videoRef.current) {
+                videoRef.current.muted = true;
+                setIsMuted(true);
+                videoRef.current.play().catch(() => {});
+              }
+            });
+          }
+          if (sessionState === 'connected' && sessionContainerRef.current) {
+            sessionContainerRef.current.focus();
           }
         }, [remoteStream, sessionState]);
+
+        const toggleMute = () => {
+          if (videoRef.current) {
+            const nextMute = !isMuted;
+            videoRef.current.muted = nextMute;
+            setIsMuted(nextMute);
+          }
+        };
 
         const copyId = () => { navigator.clipboard.writeText(myId); setCopied(true); setTimeout(() => setCopied(false), 2000); };
         const copyInviteLink = () => {
@@ -270,20 +325,42 @@
           if (!controlMode || !dataConnRef.current || !dataConnRef.current.open || sessionState !== 'connected') return;
           
           if (action === 'keydown') {
-             dataConnRef.current.send({ type: 'remote-input', action: 'keydown', key: e.key });
-             return;
+            e.preventDefault();
+            dataConnRef.current.send({
+              type: 'remote-input',
+              action: 'keydown',
+              key: e.key,
+              ctrlKey: e.ctrlKey,
+              altKey: e.altKey,
+              shiftKey: e.shiftKey
+            });
+            return;
+          }
+
+          if (action === 'wheel') {
+            dataConnRef.current.send({
+              type: 'remote-input',
+              action: 'wheel',
+              deltaY: e.deltaY
+            });
+            return;
           }
 
           if (action === 'move') {
             const now = Date.now();
-            // FIX: Limite più alto (45ms) per evitare l'ingorgo di rete che faceva muovere il mouse da solo
-            if (now - lastMoveRef.current < 45) return;
+            if (now - lastMoveRef.current < 35) return;
             lastMoveRef.current = now;
           }
 
           const coords = getPreciseCoordinates(e);
           if (coords) {
-            dataConnRef.current.send({ type: 'remote-input', action, x: coords.x, y: coords.y });
+            dataConnRef.current.send({
+              type: 'remote-input',
+              action,
+              x: coords.x,
+              y: coords.y,
+              button: e.button || 0
+            });
           }
         }, [controlMode, sessionState]);
 
@@ -291,7 +368,12 @@
 
         if (sessionState === 'connected' || sessionState === 'connecting') {
           return (
-            <div className="flex flex-col h-screen bg-[#111111] text-white font-sans no-select outline-none" tabIndex="0" onKeyDown={(e) => sendInput('keydown', e)}>
+            <div
+              ref={sessionContainerRef}
+              className="flex flex-col h-screen bg-[#111111] text-white font-sans no-select outline-none"
+              tabIndex="0"
+              onKeyDown={(e) => sendInput('keydown', e)}
+            >
               {!isFullscreen && (
                 <div className="bg-[#1e1e1e] border-b border-gray-800 flex items-center justify-between px-4 py-2">
                   <div className="flex items-center space-x-2 bg-[#2d2d2d] px-4 py-1.5 rounded-t-lg border-t-2 border-blue-500">
@@ -300,6 +382,10 @@
                     <button onClick={endSession} className="ml-4 hover:bg-red-500 rounded-full p-1 transition-colors"><X size={14} /></button>
                   </div>
                   <div className="flex items-center space-x-3">
+                    <button onClick={toggleMute} className={`px-3 py-1 rounded text-xs font-bold flex items-center ${!isMuted ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}>
+                      {!isMuted ? <Volume2 size={14} className="mr-1.5" /> : <VolumeX size={14} className="mr-1.5" />}
+                      {!isMuted ? 'Audio ON' : 'Audio Muto'}
+                    </button>
                     <button onClick={() => setControlMode(!controlMode)} className={`px-3 py-1 rounded text-xs font-bold flex items-center ${controlMode ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300'}`}>
                       <MousePointer2 size={14} className="mr-1.5" /> {controlMode ? 'Controllo ATTIVO' : 'Solo Visuale'}
                     </button>
@@ -320,11 +406,14 @@
                     ref={videoRef}
                     autoPlay
                     playsInline
-                    muted
                     onMouseMove={(e) => sendInput('move', e)}
-                    onClick={(e) => sendInput('click', e)}
-                    onDoubleClick={(e) => sendInput('dblclick', e)}
-                    onContextMenu={(e) => { e.preventDefault(); sendInput('rightclick', e); }}
+                    onMouseDown={(e) => {
+                      if (sessionContainerRef.current) sessionContainerRef.current.focus();
+                      sendInput('mousedown', e);
+                    }}
+                    onMouseUp={(e) => sendInput('mouseup', e)}
+                    onWheel={(e) => sendInput('wheel', e)}
+                    onContextMenu={(e) => e.preventDefault()}
                     className={`w-full h-full object-contain ${controlMode ? 'cursor-crosshair' : 'cursor-default'}`}
                   />
                 )}
@@ -341,7 +430,7 @@
               <p className="text-gray-400 mb-6">L'operatore <strong className="text-white">{connectedPeerId}</strong> è collegato al tuo computer.</p>
               
               <div className="bg-[#1e1e1e] p-4 rounded-lg border border-gray-700 text-xs text-gray-300 mb-8 max-w-md">
-                 {isNativeApp ? "✅ Controllo Nativo Attivo. Puoi ridurre a icona questa finestra." : "⚠️ Modalità Web: Scarica e apri il file .exe per abilitare il controllo totale del mouse."}
+                 {isNativeApp ? "✅ Controllo Nativo e Audio Attivi. Puoi ridurre a icona questa finestra." : "⚠️ Modalità Web: Scarica e apri il file .exe per abilitare il controllo totale del mouse."}
               </div>
 
               <button onClick={endSession} className="px-6 py-3 bg-red-600 hover:bg-red-500 font-bold rounded-lg flex items-center transition-colors">
