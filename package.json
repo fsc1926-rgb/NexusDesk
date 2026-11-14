@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "compile:helper": "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe /target:winexe /out:NexusInput.exe /r:System.Windows.Forms.dll NexusInput.cs",
-    "build": "electron-builder --win"
+    "build": "electron-builder --win portable"
   },
   "author": "NexusDesk",
   "license": "MIT",
@@ -17,25 +17,12 @@
   "build": {
     "appId": "com.nexusdesk.p2p",
     "productName": "NexusDesk",
-    "copyright": "Copyright © 2026 NexusDesk",
     "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ],
-      "requestedExecutionLevel": "asInvoker"
-    },
-    "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": false,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "NexusDesk",
-      "artifactName": "NexusDesk-Setup-${version}.exe"
+      "target": "portable",
+      "signAndEditExecutable": false
     },
     "portable": {
-      "artifactName": "NexusDesk-Portable-${version}.exe"
+      "artifactName": "NexusDesk-Portable.exe"
     },
     "extraResources": [
       "NexusInput.exe"

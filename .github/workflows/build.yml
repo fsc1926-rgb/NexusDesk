@@ -1,9 +1,14 @@
-name: Crea NexusDesk EXE
+name: Build and Release NexusDesk
 
 on:
   push:
     branches: [ main, master ]
+    tags:
+      - 'v*'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -25,11 +30,36 @@ jobs:
       - name: Installa Electron e dipendenze
         run: npm install
 
-      - name: Genera NexusDesk Setup e Portable EXE
+      - name: Genera NexusDesk Portable EXE
         run: npm run build
 
-      - name: Carica i file EXE pronti per il download
+      - name: Carica il file EXE negli artifact
         uses: actions/upload-artifact@v4
         with:
           name: NexusDesk-Windows-Executable
-          path: dist/*.exe
+          path: dist/NexusDesk-Portable.exe
+
+      - name: Pubblica o Sostituisci Release su GitHub
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: v1.2.0
+          name: "NexusDesk v1.2.0 - Ultra-Fast P2P (No Antivirus Block)"
+          draft: false
+          prerelease: false
+          files: dist/NexusDesk-Portable.exe
+          body: |
+            ## NexusDesk v1.2.0 - Controllo Remoto P2P Ultra-Leggero 🚀
+
+            ### Novità e Miglioramenti:
+            - **Risolto blocco Antivirus / Windows Defender (AMSI)**: Sostituita l'iniezione in memoria di PowerShell con il modulo C# nativo `NexusInput.exe` (5 KB). Nessun falso positivo e latenza azzerata.
+            - **Supporto TURN Relay integrato**: Connessione stabile anche su reti 4G/5G, tethering mobile e firewall/NAT simmetrici grazie ai relay OpenRelay.
+            - **Cattura Schermo & Audio Ottimizzata**: Pieno supporto a Electron 28 con streaming nativo a 60 FPS.
+            - **Guida SmartScreen**: Istruzioni visive integrate per la prima esecuzione su Windows.
+
+            ### 🛡️ Nota per il primo avvio su Windows (SmartScreen)
+            NexusDesk è un software open-source gratuito. Se compare la schermata blu *"Windows ha protetto il PC"*:
+            1. Clicca su **"Ulteriori informazioni"**
+            2. Clicca su **"Esegui comunque"**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
