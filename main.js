@@ -1,83 +1,63 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, screen, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, screen, clipboard, session } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 
 let mainWindow;
-let psController = null;
+let inputHelper = null;
+
+function getInputHelperPath() {
+  const candidatePaths = [
+    path.join(__dirname, 'NexusInput.exe'),
+    path.join(process.resourcesPath || '', 'NexusInput.exe'),
+    path.join(__dirname, '..', 'NexusInput.exe')
+  ];
+
+  for (const candidate of candidatePaths) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
 
 function startHardwareController() {
   if (process.platform !== 'win32') return;
-  if (psController) return;
+  if (inputHelper && !inputHelper.killed) return;
 
-  // Rimossa la flag "-ExecutionPolicy Bypass" che faceva scattare gli antivirus
-  psController = spawn('powershell.exe', [
-    '-NoProfile', '-NoLogo', '-NonInteractive', '-Command', '-'
-  ], { stdio: ['pipe', 'ignore', 'ignore'], windowsHide: true });
+  const helperPath = getInputHelperPath();
+  if (!helperPath) {
+    console.warn('NexusInput.exe non trovato in:', helperPath);
+    return;
+  }
 
-  psController.on('exit', () => {
-    psController = null;
-  });
+  try {
+    inputHelper = spawn(helperPath, [], {
+      stdio: ['pipe', 'ignore', 'ignore'],
+      windowsHide: true
+    });
 
-  psController.on('error', () => {
-    psController = null;
-  });
+    inputHelper.on('error', (err) => {
+      console.error('Errore input helper:', err);
+      inputHelper = null;
+    });
 
-  const initCSharp = `
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public class NexusInput {
-    [DllImport("user32.dll")]
-    public static extern bool SetProcessDPIAware();
-    [DllImport("user32.dll")]
-    public static extern bool SetCursorPos(int X, int Y);
-    [DllImport("user32.dll")]
-    public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, int dwExtraInfo);
-
-    public const uint LEFTDOWN = 0x0002;
-    public const uint LEFTUP = 0x0004;
-    public const uint RIGHTDOWN = 0x0008;
-    public const uint RIGHTUP = 0x0010;
-    public const uint MIDDLEDOWN = 0x0020;
-    public const uint MIDDLEUP = 0x0040;
-    public const uint WHEEL = 0x0800;
-
-    public static void Init() {
-        SetProcessDPIAware();
-    }
-    public static void Move(int x, int y) {
-        SetCursorPos(x, y);
-    }
-    public static void MouseDown(int x, int y, int button) {
-        SetCursorPos(x, y);
-        if (button == 0) mouse_event(LEFTDOWN, 0, 0, 0, 0);
-        else if (button == 1) mouse_event(MIDDLEDOWN, 0, 0, 0, 0);
-        else if (button == 2) mouse_event(RIGHTDOWN, 0, 0, 0, 0);
-    }
-    public static void MouseUp(int x, int y, int button) {
-        SetCursorPos(x, y);
-        if (button == 0) mouse_event(LEFTUP, 0, 0, 0, 0);
-        else if (button == 1) mouse_event(MIDDLEUP, 0, 0, 0, 0);
-        else if (button == 2) mouse_event(RIGHTUP, 0, 0, 0, 0);
-    }
-    public static void Scroll(int delta) {
-        mouse_event(WHEEL, 0, 0, delta, 0);
-    }
-}
-"@
-[NexusInput]::Init()
-`;
-  psController.stdin.write(initCSharp + '\n');
+    inputHelper.on('exit', () => {
+      inputHelper = null;
+    });
+  } catch (err) {
+    console.error('Impossibile avviare NexusInput.exe:', err);
+    inputHelper = null;
+  }
 }
 
 function sendHardwareCommand(cmd) {
-  if (!psController) startHardwareController();
-  if (psController && psController.stdin && psController.stdin.writable) {
+  if (!inputHelper) startHardwareController();
+  if (inputHelper && inputHelper.stdin && inputHelper.stdin.writable) {
     try {
-      psController.stdin.write(cmd + '\n');
+      inputHelper.stdin.write(cmd + '\n');
     } catch (e) {
-      psController = null;
+      inputHelper = null;
     }
   }
 }
@@ -125,12 +105,37 @@ function createWindow() {
       nodeIntegration: false
     }
   });
+
   mainWindow.loadFile('index.html');
 }
 
+// Configura la gestione di getDisplayMedia per la condivisione dello schermo
+function setupDisplayMediaHandler() {
+  if (session && session.defaultSession && session.defaultSession.setDisplayMediaRequestHandler) {
+    session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+      try {
+        const sources = await desktopCapturer.getSources({ types: ['screen'] });
+        if (sources && sources.length > 0) {
+          callback({ video: sources[0] });
+        } else {
+          callback({});
+        }
+      } catch (err) {
+        console.error('Errore getDisplayMedia:', err);
+        callback({});
+      }
+    });
+  }
+}
+
 ipcMain.handle('get-primary-screen', async () => {
-  const sources = await desktopCapturer.getSources({ types: ['screen'] });
-  return sources[0] ? sources[0].id : null;
+  try {
+    const sources = await desktopCapturer.getSources({ types: ['screen'] });
+    return sources[0] ? sources[0].id : null;
+  } catch (err) {
+    console.error('Errore get-primary-screen:', err);
+    return null;
+  }
 });
 
 ipcMain.on('write-clipboard', (event, text) => { clipboard.writeText(text || ''); });
@@ -151,34 +156,37 @@ ipcMain.on('execute-native-input', (event, data) => {
     const targetY = Math.max(0, Math.min(realHeight - 1, Math.round(data.y * realHeight)));
 
     if (data.action === 'move') {
-      sendHardwareCommand(`[NexusInput]::Move(${targetX}, ${targetY})`);
+      sendHardwareCommand(`M ${targetX} ${targetY}`);
     } else if (data.action === 'mousedown') {
-      sendHardwareCommand(`[NexusInput]::MouseDown(${targetX}, ${targetY}, ${data.button || 0})`);
+      sendHardwareCommand(`MD ${targetX} ${targetY} ${data.button || 0}`);
     } else if (data.action === 'mouseup') {
-      sendHardwareCommand(`[NexusInput]::MouseUp(${targetX}, ${targetY}, ${data.button || 0})`);
+      sendHardwareCommand(`MU ${targetX} ${targetY} ${data.button || 0}`);
     }
   }
 
   if (data.action === 'wheel' && typeof data.deltaY === 'number') {
     const wheelDelta = data.deltaY < 0 ? 120 : -120;
-    sendHardwareCommand(`[NexusInput]::Scroll(${wheelDelta})`);
+    sendHardwareCommand(`W ${wheelDelta}`);
   } else if (data.action === 'keydown' && data.key) {
     const mapped = mapKeyToSendKeys(data);
     if (mapped) {
-      const safeKey = mapped.replace(/'/g, "''");
-      sendHardwareCommand(`[System.Windows.Forms.SendKeys]::SendWait('${safeKey}')`);
+      sendHardwareCommand(`K ${mapped}`);
     }
   }
 });
 
-// Avvia solo la finestra all'apertura (PowerShell partirà in automatico solo quando inizia il controllo remoto)
 app.whenReady().then(() => {
+  setupDisplayMediaHandler();
   createWindow();
 });
 
 app.on('window-all-closed', () => {
-  if (psController) {
-    try { psController.kill(); } catch (e) {}
+  if (inputHelper) {
+    try {
+      inputHelper.stdin.write('EXIT\n');
+      inputHelper.kill();
+    } catch (e) {}
+    inputHelper = null;
   }
   if (process.platform !== 'darwin') app.quit();
 });

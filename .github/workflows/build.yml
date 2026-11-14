@@ -18,14 +18,18 @@ jobs:
         with:
           node-version: 20
 
+      - name: Compila helper nativo NexusInput (evita blocchi antivirus)
+        run: |
+          & "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /target:winexe /out:NexusInput.exe /r:System.Windows.Forms.dll NexusInput.cs
+
       - name: Installa Electron e dipendenze
         run: npm install
 
-      - name: Genera NexusDesk-Portable.exe
+      - name: Genera NexusDesk Setup e Portable EXE
         run: npm run build
 
-      - name: Carica il file EXE pronto per il download
+      - name: Carica i file EXE pronti per il download
         uses: actions/upload-artifact@v4
         with:
           name: NexusDesk-Windows-Executable
-          path: dist/NexusDesk-Portable.exe
+          path: dist/*.exe

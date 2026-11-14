@@ -37,9 +37,11 @@
         LinkIcon: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>,
         Maximize: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>,
         Volume2: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>,
-        VolumeX: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>
+        VolumeX: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>,
+        ShieldAlert: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+        Download: ({size=24, className=""}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       };
-      const { Monitor, Copy, Check, Play, X, MousePointer2, LinkIcon, Maximize, Volume2, VolumeX } = Icons;
+      const { Monitor, Copy, Check, Play, X, MousePointer2, LinkIcon, Maximize, Volume2, VolumeX, ShieldAlert, Download } = Icons;
       
       function App() {
         const [myId, setMyId] = useState('');
@@ -57,6 +59,7 @@
         const [controlMode, setControlMode] = useState(true);
         const [isMuted, setIsMuted] = useState(false);
         const [remoteCursor, setRemoteCursor] = useState(null);
+        const [showSmartScreenGuide, setShowSmartScreenGuide] = useState(false);
 
         const peerRef = useRef(null);
         const dataConnRef = useRef(null);
@@ -71,43 +74,34 @@
         const generateNewId = () => Math.floor(100000000 + Math.random() * 900000000).toString();
 
         const captureScreenStream = async () => {
-          if (isNativeApp) {
-            const sourceId = await window.nexusNative.getPrimaryScreenId();
-            if (sourceId) {
-              const videoConstraints = {
-                mandatory: {
-                  chromeMediaSource: 'desktop',
-                  chromeMediaSourceId: sourceId,
-                  maxWidth: 1920,
-                  maxHeight: 1080,
-                  maxFrameRate: 30
-                }
-              };
-              try {
-                // Tentativo con Audio di Sistema (Loopback Windows) + Video
-                return await navigator.mediaDevices.getUserMedia({
-                  audio: {
-                    mandatory: {
-                      chromeMediaSource: 'desktop',
-                      chromeMediaSourceId: sourceId
-                    }
-                  },
-                  video: videoConstraints
-                });
-              } catch (audioErr) {
-                console.warn("Audio di sistema non disponibile, fallback a solo video:", audioErr);
+          // In app nativa Electron prova prima getPrimaryScreenId nativo
+          if (isNativeApp && window.nexusNative && window.nexusNative.getPrimaryScreenId) {
+            try {
+              const sourceId = await window.nexusNative.getPrimaryScreenId();
+              if (sourceId) {
                 return await navigator.mediaDevices.getUserMedia({
                   audio: false,
-                  video: videoConstraints
+                  video: {
+                    mandatory: {
+                      chromeMediaSource: 'desktop',
+                      chromeMediaSourceId: sourceId,
+                      maxWidth: 1920,
+                      maxHeight: 1080,
+                      maxFrameRate: 30
+                    }
+                  }
                 });
               }
+            } catch (nativeErr) {
+              console.warn("getUserMedia nativo non riuscito, uso fallback getDisplayMedia:", nativeErr);
             }
           }
-          // Versione Browser Web: richiede condivisione schermo + audio di sistema/scheda
+
+          // Fallback universale (compatibile sia con Electron moderno che con browser web)
           try {
             return await navigator.mediaDevices.getDisplayMedia({
               video: { cursor: "always", displaySurface: "monitor" },
-              audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+              audio: true
             });
           } catch (err) {
             return await navigator.mediaDevices.getDisplayMedia({
@@ -126,8 +120,26 @@
           localStorage.setItem('nexus_id', storedId);
           setMyId(storedId);
 
+          const iceServers = [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' },
+            { urls: 'stun:stun.cloudflare.com:3478' },
+            // Server TURN OpenRelay per attraversare firewall restrittivi e reti mobili
+            {
+              urls: [
+                'turn:openrelay.metered.ca:80',
+                'turn:openrelay.metered.ca:443',
+                'turn:openrelay.metered.ca:443?transport=tcp'
+              ],
+              username: 'openrelayproject',
+              credential: 'openrelayproject'
+            }
+          ];
+
           const peer = new Peer(storedId, {
-            config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:global.stun.twilio.com:3478' }] }
+            config: { iceServers, iceCandidatePoolSize: 10 }
           });
 
           peerRef.current = peer;
@@ -161,7 +173,7 @@
               alert("Connessione rifiutata dall'ospite.");
               endSession();
             } else if (data.type === 'remote-input') {
-              if (isNativeApp) {
+              if (isNativeApp && window.nexusNative) {
                 window.nexusNative.sendNativeInput(data);
               } else if (data.action === 'mousedown') {
                 setRemoteCursor({ x: data.x, y: data.y });
@@ -187,7 +199,6 @@
             videoRef.current.srcObject = remoteStream;
             videoRef.current.muted = isMuted;
             videoRef.current.play().catch(() => {
-              // Se l'autoplay con audio viene bloccato dal browser, parte in mute e aggiorna lo stato UI
               if (videoRef.current) {
                 videoRef.current.muted = true;
                 setIsMuted(true);
@@ -348,7 +359,7 @@
 
           if (action === 'move') {
             const now = Date.now();
-            if (now - lastMoveRef.current < 35) return;
+            if (now - lastMoveRef.current < 25) return;
             lastMoveRef.current = now;
           }
 
@@ -452,6 +463,13 @@
                 <span className="font-semibold">NexusDesk {isNativeApp ? 'Desktop Pro' : 'Web P2P'}</span>
               </div>
               <div className="flex items-center space-x-3 text-xs">
+                <button
+                  onClick={() => setShowSmartScreenGuide(true)}
+                  className="flex items-center text-xs bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 border border-blue-700/50 px-2.5 py-1 rounded transition-colors"
+                >
+                  <ShieldAlert size={14} className="mr-1.5 text-blue-400" />
+                  Guida Avviso Windows
+                </button>
                 <span className="flex items-center text-gray-300">
                   <span className={`w-2.5 h-2.5 rounded-full mr-2 ${peerReady ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-yellow-500 animate-pulse'}`}></span>
                   {statusMsg}
@@ -479,9 +497,37 @@
                   <div>
                     <label className="text-xs text-gray-400 uppercase font-bold mb-1 block">Modalità Sistema</label>
                     <div className={`text-xs font-semibold ${isNativeApp ? 'text-green-400' : 'text-yellow-400'}`}>
-                      {isNativeApp ? '✔ Controllo Hardware Nativo Abilitato' : 'Browser Web (Controllo passivo)'}
+                      {isNativeApp ? '✔ Controllo Hardware Nativo Ultra-Fast Abilitato' : 'Browser Web (Controllo passivo)'}
                     </div>
                   </div>
+
+                  {!isNativeApp && (
+                    <div className="mt-5 pt-4 border-t border-gray-800">
+                      <div className="flex items-start">
+                        <ShieldAlert size={18} className="text-blue-400 mr-2 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-semibold text-xs text-blue-200 mb-1">Passa all'App Desktop per il controllo completo</div>
+                          <p className="text-gray-400 text-xs mb-3">La versione Web consente di visualizzare lo schermo. Per controllare mouse e tastiera in tempo reale, usa l'app nativa Windows.</p>
+                          <div className="flex flex-wrap gap-2">
+                            <a
+                              href="https://github.com/fsc1926-rgb/NexusDesk/releases"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors"
+                            >
+                              <Download size={14} className="mr-1.5" /> Scarica per Windows
+                            </a>
+                            <button
+                              onClick={() => setShowSmartScreenGuide(true)}
+                              className="inline-flex items-center bg-[#2a2a2a] hover:bg-[#333] text-gray-300 px-3 py-1.5 rounded text-xs transition-colors"
+                            >
+                              Avviso SmartScreen?
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -512,6 +558,47 @@
                   <div className="flex space-x-3">
                     <button onClick={rejectRequest} className="flex-1 bg-gray-700 py-3 rounded font-bold">Rifiuta</button>
                     <button onClick={acceptRequest} className="flex-1 bg-green-600 py-3 rounded font-bold flex justify-center"><Check size={18} className="mr-2" /> Accetta</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showSmartScreenGuide && (
+              <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="bg-[#242424] border border-blue-500/40 rounded-xl max-w-lg w-full p-6 shadow-2xl relative">
+                  <button onClick={() => setShowSmartScreenGuide(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white p-1 rounded-full hover:bg-gray-700">
+                    <X size={20} />
+                  </button>
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="p-3 bg-blue-500/20 text-blue-400 rounded-lg">
+                      <ShieldAlert size={28} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Avviso di Sicurezza Windows (SmartScreen)</h3>
+                      <p className="text-xs text-gray-400">Guida per la prima installazione o avvio</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3 text-sm text-gray-300 mb-6">
+                    <div className="bg-[#1a1a1a] p-3 rounded-lg border border-gray-800">
+                      <strong className="text-blue-300 block mb-1">Perché compare la schermata blu di Windows?</strong>
+                      NexusDesk è un software open-source gratuito. Windows SmartScreen mostra preventivamente l'avviso <em className="text-white">"Windows ha protetto il PC"</em> per qualsiasi programma nuovo o non provvisto di un costoso certificato commerciale a pagamento.
+                    </div>
+
+                    <div className="bg-blue-950/30 border border-blue-900/50 p-3 rounded-lg">
+                      <strong className="text-white block mb-2">Come procedere in 2 clic:</strong>
+                      <ol className="list-decimal list-inside space-y-1.5 text-xs text-gray-200">
+                        <li>Nella schermata blu di Microsoft Defender, clicca sul link <strong className="text-blue-400 underline">"Ulteriori informazioni"</strong>.</li>
+                        <li>In basso comparirà il pulsante <strong className="text-green-400">"Esegui comunque"</strong>: cliccalo per avviare subito NexusDesk.</li>
+                        <li>Questo avviso appare soltanto alla prima esecuzione; in seguito il software si aprirà istantaneamente.</li>
+                      </ol>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button onClick={() => setShowSmartScreenGuide(false)} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 font-bold rounded-lg text-sm transition-colors text-white">
+                      Ho capito, procedi
+                    </button>
                   </div>
                 </div>
               </div>

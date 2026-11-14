@@ -1,11 +1,12 @@
 {
-  "name": "nexusdesk-native",
-  "version": "1.1.0",
-  "description": "NexusDesk P2P - Controllo Remoto Nativo",
+  "name": "nexusdesk",
+  "version": "1.2.0",
+  "description": "NexusDesk P2P - Controllo Remoto Nativo Ultra-Leggero",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win portable"
+    "compile:helper": "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe /target:winexe /out:NexusInput.exe /r:System.Windows.Forms.dll NexusInput.cs",
+    "build": "electron-builder --win"
   },
   "author": "NexusDesk",
   "license": "MIT",
@@ -16,11 +17,28 @@
   "build": {
     "appId": "com.nexusdesk.p2p",
     "productName": "NexusDesk",
+    "copyright": "Copyright © 2026 NexusDesk",
     "win": {
-      "target": "portable"
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NexusDesk",
+      "artifactName": "NexusDesk-Setup-${version}.exe"
     },
     "portable": {
-      "artifactName": "NexusDesk-Portable.exe"
-    }
+      "artifactName": "NexusDesk-Portable-${version}.exe"
+    },
+    "extraResources": [
+      "NexusInput.exe"
+    ]
   }
 }
